@@ -1,0 +1,14 @@
+# Local run: docker compose -f server/docker-compose.yml up --build
+services:
+  ranking:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ranking-data:/data
+    restart: unless-stopped
+
+volumes:
+  ranking-data:

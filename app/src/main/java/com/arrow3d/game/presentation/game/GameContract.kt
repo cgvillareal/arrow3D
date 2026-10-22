@@ -24,6 +24,7 @@ data class GameState(
     val recordRank: Int? = null,
     /** Daily challenge streak after this win. */
     val dailyStreak: Int = 0,
+    val online: OnlineResult = OnlineResult.None,
 ) {
     val isDaily: Boolean get() = mode == PlayMode.Daily
 
@@ -45,6 +46,16 @@ data class GameState(
 
     /** Clock time of the last release; the combo badge drains from there. */
     val comboStartedAt: Long? get() = puzzle?.lastReleaseAt
+}
+
+/** Where the last win stands on the online ranking. */
+sealed interface OnlineResult {
+    data object None : OnlineResult
+    data object Sending : OnlineResult
+    data class Ranked(val rank: Int) : OnlineResult
+
+    /** Offline: it will be sent later. */
+    data object Queued : OnlineResult
 }
 
 sealed interface GameEvent {

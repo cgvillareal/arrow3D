@@ -20,8 +20,13 @@ Tests:
 
 ```bash
 ./gradlew :core:domain:test      # reglas, superficie, solver, generador, motor
-./gradlew :app:testDebugUnitTest # proyección/toque y GameViewModel
+./gradlew :core:online:test       # protocolo y verificación de partidas
+./gradlew :app:testDebugUnitTest # proyección/toque, sonido y ViewModels
+./gradlew -p server test         # servidor del ranking (build aparte, sin Android)
 ```
+
+El ranking mundial necesita la URL del servidor al compilar (`-Parrow3d.rankingUrl=https://...`);
+ver [server/README.md](server/README.md).
 
 ## Qué incluye
 
@@ -46,7 +51,8 @@ Tests:
 | Vibración por evento (liberada, bloqueada, doblez, cadena, nivel completo, sin vidas) | ✅ con primitivas en API 30+ y opción para apagarla |
 | Giro de 360° al terminar y pantalla de resultado con estrellas | ✅ |
 | Progreso por modo y ajuste de vibración guardados (DataStore) | ✅ |
-| Ranking online, música | ⏳ el ranking online necesita un servidor; hoy los récords son locales |
+| Ranking mundial | ✅ servidor propio en `server/` (Ktor + SQLite + Docker); verifica cada partida volviéndola a jugar. Ver [server/README.md](server/README.md) |
+| Música | ⏳ |
 
 ## Arquitectura
 
@@ -60,6 +66,10 @@ Tests:
   engine/      PuzzleEngine: tap, vidas, combos y puntos, deshacer, pista, reiniciar (funciones puras)
   modes/       PlayMode, LevelSpec, AdaptiveDifficulty, DailyChallenge (racha), Leaderboard (top 10)
 
+:core:online   Kotlin puro. Protocolo del ranking, RunVerifier (vuelve a jugar una partida) y RankingClient (HTTP)
+
+server/        Build aparte: servidor del ranking (Ktor + SQLite), usa :core:domain y :core:online
+
 :app           Android + Jetpack Compose, MVI, Koin
   render/      Proyección 3D, geometría de flechas y detección de toque (Kotlin puro, con tests)
   presentation/game/cube/  CubeView (Canvas + gestos), cámara con inercia, animaciones, renderer
@@ -68,6 +78,7 @@ Tests:
   presentation/records/    Récords por modo
   audio/       ToneSynth (síntesis + WAV, Kotlin puro) y AndroidSoundPlayer (SoundPool)
   data/        IProgressRepository + ProgressRepositoryImpl (DataStore): niveles, ajustes, adaptativo, diario, récords
+               IOnlineRanking + OnlineRankingImpl: cuenta anónima, envío de partidas y cola sin conexión
   haptics/     IHaptics + AndroidHaptics (VibrationEffect, Composition en API 30+)
 ```
 
@@ -79,6 +90,7 @@ Decisiones:
 - **Flechas dobladas sin cerrar salidas.** Una flecha doblada crece desde su celda por celdas vacías, sin meterse en los anillos más cercanos al borde: esas celdas se visitan después y necesitan su propia salida recta. Así el generador nunca tiene que caer al plan de flechas de una celda.
 - **Sonido sin archivos.** Los efectos se sintetizan al arrancar, se guardan como WAV en la caché y se tocan con `SoundPool`. La síntesis es Kotlin puro y tiene tests.
 - **Modos como datos.** Cada modo se reduce a un `LevelSpec` (configuración del generador, semilla y reglas), así el ViewModel juega igual un nivel clásico, uno adaptativo o el diario.
+- **Ranking que no se puede inventar.** La app no manda un puntaje: manda las jugadas. El servidor rearma el nivel desde la semilla y las vuelve a jugar con el mismo `PuzzleEngine`, así que el puntaje del ranking es siempre el que da el motor.
 - **Combos en el dominio.** `PuzzleEngine.tap` recibe la hora del toque, así que la regla del combo es pura y testeable; el ViewModel le pasa un reloj inyectable.
 - **Animaciones en la capa de dibujo.** El reloj de cuadros se lee dentro del `Canvas`, así que animar no recompone la pantalla.
 

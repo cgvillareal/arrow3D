@@ -14,10 +14,19 @@ import com.arrow3d.domain.modes.ScoreEntry
 import com.arrow3d.domain.solver.Solver
 import com.arrow3d.game.audio.ISoundPlayer
 import com.arrow3d.game.audio.SoundEvent
+import com.arrow3d.game.data.IOnlineRanking
 import com.arrow3d.game.data.IProgressRepository
+import com.arrow3d.game.data.OnlineAccount
+import com.arrow3d.game.data.SubmitOutcome
 import com.arrow3d.game.data.Settings
 import com.arrow3d.game.haptics.HapticEvent
 import com.arrow3d.game.haptics.IHaptics
+import com.arrow3d.online.ApiResult
+import com.arrow3d.online.LeaderboardResponse
+import com.arrow3d.online.RunResult
+import com.arrow3d.online.RunSubmission
+import com.arrow3d.online.RunVerifier
+import com.arrow3d.online.Verdict
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -68,6 +77,20 @@ private class FakeProgressRepository(startLevel: Int = 1) : IProgressRepository 
     }
 }
 
+private class FakeOnline(override val isConfigured: Boolean = true) : IOnlineRanking {
+    val submitted = mutableListOf<RunSubmission>()
+    var outcome: (RunSubmission) -> SubmitOutcome = { SubmitOutcome.Ranked(RunResult(score = 1, bestCombo = 1, rank = 7, improved = true)) }
+    override fun observeAccount(): Flow<OnlineAccount?> = MutableStateFlow(OnlineAccount("id", "Ana", "token"))
+    override suspend fun join(name: String): ApiResult<OnlineAccount> = ApiResult.Ok(OnlineAccount("id", name, "token"))
+    override suspend fun submit(run: RunSubmission): SubmitOutcome {
+        submitted += run
+        return outcome(run)
+    }
+    override suspend fun leaderboard(modeKey: String, day: Long): ApiResult<LeaderboardResponse> =
+        ApiResult.Ok(LeaderboardResponse(modeKey, entries = emptyList()))
+    override suspend fun flushPending() = Unit
+}
+
 private class FakeSound : ISoundPlayer {
     val played = mutableListOf<SoundEvent>()
     override fun play(event: SoundEvent) {
@@ -89,6 +112,7 @@ class GameViewModelTest {
     private lateinit var repository: FakeProgressRepository
     private lateinit var haptics: FakeHaptics
     private lateinit var sound: FakeSound
+    private lateinit var online: FakeOnline
 
     @Before
     fun setUp() {
@@ -97,6 +121,7 @@ class GameViewModelTest {
         repository = FakeProgressRepository()
         haptics = FakeHaptics()
         sound = FakeSound()
+        online = FakeOnline()
     }
 
     @After
@@ -107,7 +132,7 @@ class GameViewModelTest {
     private fun viewModel(difficulty: Difficulty = Difficulty.EASY) = viewModel(PlayMode.Classic(difficulty))
 
     private fun viewModel(mode: PlayMode, now: () -> Long = { 0L }) =
-        GameViewModel(mode, repository, haptics, sound, computeDispatcher = dispatcher, clock = now, today = { TODAY })
+        GameViewModel(mode, repository, haptics, sound, online, computeDispatcher = dispatcher, clock = now, today = { TODAY })
 
     private fun solve(vm: GameViewModel) {
         Solver.solve(vm.state.value.puzzle!!.level).order.forEach { vm.onEvent(GameEvent.OnArrowTapped(it, ambiguous = false)) }
@@ -307,6 +332,66 @@ class GameViewModelTest {
         assertEquals(5, vm.state.value.dailyStreak)
         assertTrue(repository.daily.value.completedOn(TODAY))
         assertEquals(vm.state.value.score, repository.boards.value.getValue("daily").best?.score)
+    }
+
+    @Test
+    fun `a win sends a run that the server's verifier accepts with the same score`() = runTest(dispatcher) {
+        var now = 50_000L
+        val vm = viewModel(PlayMode.Classic(Difficulty.EASY)) { now }
+        advanceUntilIdle()
+        val puzzle = vm.state.value.puzzle!!
+        // a mistake, an undo, a hint and a restart all have to replay exactly
+        val blocked = puzzle.remaining.first { !puzzle.level.isFree(it, puzzle.remaining) }
+        vm.onEvent(GameEvent.OnArrowTapped(blocked, ambiguous = false))
+        now += 300
+        vm.onEvent(GameEvent.OnArrowTapped(puzzle.level.freeArrows(puzzle.remaining).first(), ambiguous = false))
+        now += 300
+        vm.onEvent(GameEvent.OnUndo)
+        vm.onEvent(GameEvent.OnHint)
+        vm.onEvent(GameEvent.OnRestart)
+        Solver.solve(puzzle.level).order.forEach {
+            now += 400
+            vm.onEvent(GameEvent.OnArrowTapped(it, ambiguous = false))
+        }
+        advanceUntilIdle()
+
+        val run = online.submitted.single()
+        assertEquals("easy", run.mode)
+        assertEquals(TODAY, run.day)
+        val verdict = RunVerifier.verify(run, serverDay = TODAY) as Verdict.Accepted
+        assertEquals(vm.state.value.score, verdict.score)
+        assertEquals(vm.state.value.bestCombo, verdict.bestCombo)
+        assertEquals(OnlineResult.Ranked(7), vm.state.value.online)
+    }
+
+    @Test
+    fun `adaptive runs carry their rating and offline wins are queued`() = runTest(dispatcher) {
+        repository.adaptive.value = AdaptiveProgress(level = 3, rating = 2.4)
+        online.outcome = { SubmitOutcome.Queued }
+        var now = 0L
+        val vm = viewModel(PlayMode.Adaptive) { now }
+        advanceUntilIdle()
+        Solver.solve(vm.state.value.puzzle!!.level).order.forEach {
+            now += 300
+            vm.onEvent(GameEvent.OnArrowTapped(it, ambiguous = false))
+        }
+        advanceUntilIdle()
+        val run = online.submitted.single()
+        assertEquals(2.4, run.rating!!, 1e-9)
+        assertEquals(3, run.level)
+        assertTrue(RunVerifier.verify(run, TODAY) is Verdict.Accepted)
+        assertEquals(OnlineResult.Queued, vm.state.value.online)
+    }
+
+    @Test
+    fun `nothing is sent when the ranking is not configured`() = runTest(dispatcher) {
+        online = FakeOnline(isConfigured = false)
+        val vm = viewModel()
+        advanceUntilIdle()
+        solve(vm)
+        advanceUntilIdle()
+        assertTrue(online.submitted.isEmpty())
+        assertEquals(OnlineResult.None, vm.state.value.online)
     }
 
     private companion object {

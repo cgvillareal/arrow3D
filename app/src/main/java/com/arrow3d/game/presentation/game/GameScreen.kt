@@ -162,7 +162,11 @@ fun GameScreen(
                     lives
                 },
                 stars = state.stars,
-                detail = listOfNotNull(stringResource(R.string.result_score, state.score, state.bestCombo), record).joinToString("\n"),
+                detail = listOfNotNull(
+                    stringResource(R.string.result_score, state.score, state.bestCombo),
+                    record,
+                    onlineLine(state.online),
+                ).joinToString("\n"),
                 // The daily challenge has no next level: it is one puzzle a day.
                 primaryLabel = stringResource(if (state.isDaily) R.string.result_back else R.string.result_next),
                 onPrimary = { onEvent(if (state.isDaily) GameEvent.OnBack else GameEvent.OnNextLevel) },
@@ -375,6 +379,14 @@ private fun GameActions(state: GameState, onEvent: (GameEvent) -> Unit) {
             modifier = Modifier.weight(1f),
         )
     }
+}
+
+@Composable
+private fun onlineLine(online: OnlineResult): String? = when (online) {
+    OnlineResult.None -> null
+    OnlineResult.Sending -> stringResource(R.string.result_online_sending)
+    OnlineResult.Queued -> stringResource(R.string.result_online_queued)
+    is OnlineResult.Ranked -> stringResource(R.string.result_online_rank, online.rank)
 }
 
 @Composable

@@ -16,10 +16,21 @@ android {
         versionName = "0.1.0"
     }
 
+    // Online ranking server. Set it with -Parrow3d.rankingUrl=https://... or in gradle.properties.
+    // Debug builds default to the emulator's view of a server on the host (http://10.0.2.2:8080);
+    // release builds have the ranking turned off until a URL is given.
+    val rankingUrl = providers.gradleProperty("arrow3d.rankingUrl")
+
     buildTypes {
+        debug {
+            buildConfigField("String", "RANKING_URL", "\"${rankingUrl.getOrElse("http://10.0.2.2:8080")}\"")
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            buildConfigField("String", "RANKING_URL", "\"${rankingUrl.getOrElse("")}\"")
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
         }
     }
     compileOptions {
@@ -31,6 +42,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -39,6 +51,7 @@ android {
 
 dependencies {
     implementation(project(":core:domain"))
+    implementation(project(":core:online"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

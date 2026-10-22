@@ -16,9 +16,14 @@ import com.arrow3d.domain.modes.PlayMode
 import com.arrow3d.domain.modes.ScoreEntry
 import com.arrow3d.game.audio.ISoundPlayer
 import com.arrow3d.game.audio.SoundEvent
+import com.arrow3d.game.data.IOnlineRanking
 import com.arrow3d.game.data.IProgressRepository
+import com.arrow3d.game.data.SubmitOutcome
 import com.arrow3d.game.haptics.HapticEvent
 import com.arrow3d.game.haptics.IHaptics
+import com.arrow3d.online.ActionType
+import com.arrow3d.online.RunAction
+import com.arrow3d.online.RunSubmission
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -40,6 +45,7 @@ class GameViewModel(
     private val progressRepository: IProgressRepository,
     private val haptics: IHaptics,
     private val sound: ISoundPlayer,
+    private val online: IOnlineRanking,
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** Monotonic clock (ms) for the combo window. */
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
@@ -59,6 +65,12 @@ class GameViewModel(
     private var resultSaved = false
     private var helpUsed = false
     private var saveJob: Job? = null
+
+    /** Everything the player did since the level was loaded, replayed by the ranking server. */
+    private val runLog = ArrayList<RunAction>()
+    private var runStartedAt = 0L
+    /** Adaptive rating the level was generated with (the server needs it to rebuild the level). */
+    private var loadedRating: Double? = null
 
     init {
         viewModelScope.launch {
@@ -93,6 +105,7 @@ class GameViewModel(
             }
             PlayMode.Adaptive -> {
                 val progress = progressRepository.observeAdaptive().first()
+                loadedRating = progress.rating
                 loadLevel(progress.level, AdaptiveDifficulty.spec(progress))
             }
             PlayMode.Daily -> {
@@ -107,6 +120,8 @@ class GameViewModel(
         val generated = withContext(computeDispatcher) { LevelGenerator(spec.config).generate(spec.seed) }
         val puzzle = PuzzleEngine.start(generated.level, spec.lives, spec.undos, spec.hints)
         startAttempt()
+        runLog.clear()
+        runStartedAt = clock()
         _state.update {
             it.copy(isLoading = false, puzzle = puzzle, session = it.session + 1, hintArrowId = null)
         }
@@ -115,12 +130,14 @@ class GameViewModel(
     private fun startAttempt() {
         resultSaved = false
         helpUsed = false
-        _state.update { it.copy(recordRank = null, lastPoints = 0) }
+        _state.update { it.copy(recordRank = null, lastPoints = 0, online = OnlineResult.None) }
     }
 
     private fun onArrowTapped(arrowId: Int, ambiguous: Boolean) {
         val puzzle = _state.value.puzzle ?: return
-        val result = PuzzleEngine.tap(puzzle, arrowId, ambiguous, nowMillis = clock())
+        val now = clock()
+        val result = PuzzleEngine.tap(puzzle, arrowId, ambiguous, nowMillis = now)
+        if (result.outcome != TapOutcome.Ignored) log(ActionType.TAP, now, arrowId, ambiguous)
         when (val outcome = result.outcome) {
             is TapOutcome.Released -> {
                 _state.update { it.copy(puzzle = result.state, hintArrowId = null, lastPoints = outcome.points) }
@@ -183,6 +200,31 @@ class GameViewModel(
             val rank = progressRepository.addScore(mode.key, ScoreEntry(puzzle.score, puzzle.bestCombo, levelNumber, day))
             _state.update { it.copy(recordRank = rank) }
         }
+        submitOnline(levelNumber, day)
+    }
+
+    private fun submitOnline(levelNumber: Int, day: Long) {
+        if (!online.isConfigured) return
+        val run = RunSubmission(
+            mode = mode.key,
+            level = levelNumber,
+            day = day,
+            rating = if (mode == PlayMode.Adaptive) loadedRating else null,
+            actions = runLog.toList(),
+        )
+        _state.update { it.copy(online = OnlineResult.Sending) }
+        viewModelScope.launch {
+            val result = when (val outcome = online.submit(run)) {
+                is SubmitOutcome.Ranked -> OnlineResult.Ranked(outcome.result.rank)
+                SubmitOutcome.Queued -> OnlineResult.Queued
+                SubmitOutcome.Rejected, SubmitOutcome.Skipped -> OnlineResult.None
+            }
+            _state.update { it.copy(online = result) }
+        }
+    }
+
+    private fun log(type: ActionType, now: Long = clock(), arrowId: Int? = null, ambiguous: Boolean = false) {
+        runLog += RunAction(type, t = (now - runStartedAt).coerceAtLeast(0), arrowId = arrowId, ambiguous = ambiguous)
     }
 
     private fun onLevelLost(puzzle: PuzzleState) {
@@ -206,6 +248,7 @@ class GameViewModel(
         val (newState, restored) = PuzzleEngine.undo(puzzle)
         if (restored == null) return
         helpUsed = true
+        log(ActionType.UNDO)
         _state.update { it.copy(puzzle = newState, hintArrowId = null) }
         emitFx(ArrowFx.Restored(restored))
     }
@@ -216,6 +259,7 @@ class GameViewModel(
         val (newState, hint) = PuzzleEngine.hint(puzzle)
         if (hint == null) return
         helpUsed = true
+        log(ActionType.HINT)
         _state.update { it.copy(puzzle = newState, hintArrowId = hint) }
     }
 
@@ -224,6 +268,7 @@ class GameViewModel(
         val wasPlaying = puzzle.status == PuzzleStatus.PLAYING
         // A retry after losing, or a replay after winning, is a new attempt; restarting midway is not.
         if (!wasPlaying) startAttempt()
+        log(ActionType.RESTART)
         _state.update {
             it.copy(puzzle = PuzzleEngine.restart(puzzle), session = it.session + 1, hintArrowId = null)
         }
