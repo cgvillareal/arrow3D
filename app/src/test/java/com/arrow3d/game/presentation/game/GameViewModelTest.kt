@@ -1,6 +1,7 @@
 package com.arrow3d.game.presentation.game
 
 import app.cash.turbine.test
+import com.arrow3d.domain.engine.ComboRules
 import com.arrow3d.domain.engine.PuzzleStatus
 import com.arrow3d.domain.generator.Difficulty
 import com.arrow3d.domain.solver.Solver
@@ -160,5 +161,27 @@ class GameViewModelTest {
         vm.onEvent(GameEvent.OnUndo)
         assertEquals(0, vm.state.value.removed)
         assertFalse(vm.state.value.canUndo)
+    }
+
+    @Test
+    fun `quick releases build a combo, a slow one starts over`() = runTest(dispatcher) {
+        var now = 10_000L
+        val vm = GameViewModel(Difficulty.EASY, repository, haptics, computeDispatcher = dispatcher, clock = { now })
+        advanceUntilIdle()
+        val order = Solver.solve(vm.state.value.puzzle!!.level).order
+
+        vm.onEvent(GameEvent.OnArrowTapped(order[0], ambiguous = false))
+        now += 500
+        vm.onEvent(GameEvent.OnArrowTapped(order[1], ambiguous = false))
+        assertEquals(2, vm.state.value.combo)
+        val base = ComboRules.basePoints(vm.state.value.puzzle!!.level.arrow(order[1]))
+        assertEquals(base * 2, vm.state.value.lastPoints)
+        advanceUntilIdle()
+        assertTrue(haptics.played.contains(HapticEvent.Combo(2)))
+
+        now += ComboRules.WINDOW_MS + 1
+        vm.onEvent(GameEvent.OnArrowTapped(order[2], ambiguous = false))
+        assertEquals(1, vm.state.value.combo)
+        assertEquals(2, vm.state.value.bestCombo)
     }
 }

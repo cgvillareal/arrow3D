@@ -19,6 +19,7 @@ class ArrowShape(
  * Turns a domain [Route] into screen polygons. The arrow occupies the arc-length interval
  * [offset + TAIL_INSET, offset + bodyLength - HEAD_GAP] along the route, so the same code draws
  * an arrow at rest, sliding over its face, folding over an edge (traveler) and leaving the shape.
+ * A bent arrow moves like a snake: its body follows the turns of the route.
  */
 object ArrowGeometry {
     // All lengths in doubled units (one cell = 2).
@@ -42,7 +43,8 @@ object ArrowGeometry {
         val shaftEnd = end - HEAD_LENGTH
         val polygons = ArrayList<ScreenPolygon>()
 
-        for (p in pieces(route, start, shaftEnd)) {
+        val shaft = pieces(route, start, shaftEnd)
+        for (p in shaft) {
             if (!projector.isFacing(p.normal, p.from)) continue
             val side = (p.dir cross Vec3f.of(p.normal)).normalized() * (SHAFT_HALF_WIDTH * widthScale)
             polygons += ScreenPolygon(
@@ -52,6 +54,17 @@ object ArrowGeometry {
                     projector.projectSurface(p.to + side),
                     projector.projectSurface(p.from + side),
                 ),
+            )
+        }
+        // A bent body turns at a cell centre: fill the outer corner so the shaft stays solid.
+        // Pieces on different faces meet at an edge (traveler fold) and need no corner.
+        shaft.zipWithNext().forEach { (a, b) ->
+            if (a.normal != b.normal || !projector.isFacing(a.normal, a.to)) return@forEach
+            val halfWidth = SHAFT_HALF_WIDTH * widthScale
+            val forward = a.dir * halfWidth
+            val back = b.dir * -halfWidth
+            polygons += ScreenPolygon(
+                listOf(a.to, a.to + forward, a.to + forward + back, a.to + back).map { projector.projectSurface(it) },
             )
         }
 

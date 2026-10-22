@@ -15,6 +15,8 @@ data class GameState(
     val session: Int = 0,
     val hintArrowId: Int? = null,
     val vibrationEnabled: Boolean = true,
+    /** Points the last release scored, shown next to the combo. */
+    val lastPoints: Int = 0,
 ) {
     val status: PuzzleStatus get() = puzzle?.status ?: PuzzleStatus.PLAYING
     val lives: Int? get() = puzzle?.lives
@@ -28,6 +30,12 @@ data class GameState(
     val hintsLeft: Int? get() = puzzle?.hintsLeft
     val stars: Int get() = puzzle?.stars ?: 0
     val livesLost: Int get() = puzzle?.livesLost ?: 0
+    val combo: Int get() = puzzle?.combo ?: 0
+    val bestCombo: Int get() = puzzle?.bestCombo ?: 0
+    val score: Int get() = puzzle?.score ?: 0
+
+    /** Clock time of the last release; the combo badge drains from there. */
+    val comboStartedAt: Long? get() = puzzle?.lastReleaseAt
 }
 
 sealed interface GameEvent {

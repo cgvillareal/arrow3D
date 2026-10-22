@@ -44,7 +44,10 @@ fun CubeSurface.exitPath(arrow: Arrow): List<CellRef> {
  * Positions are in doubled world units.
  */
 data class Route(
-    /** points[0] = back of the tail; then one point per edge crossed; last = point off the surface. */
+    /**
+     * points[0] = back of the tail; then one point per turn of a bent body, one per edge crossed;
+     * last = point off the surface.
+     */
     val points: List<Vec3i>,
     /** Outward normal of the face each segment lies on (last segment keeps the last face's normal). */
     val segmentNormals: List<Vec3i>,
@@ -58,8 +61,16 @@ fun CubeSurface.route(arrow: Arrow): Route {
     var dir = arrow.dir
     var face = arrow.face
     var travel = dir3(face, dir)
-    val points = mutableListOf(center(CellRef(face, arrow.tail)) - travel)
+    val points = mutableListOf(center(CellRef(face, arrow.tail)) - dir3(face, arrow.tailDir))
     val normals = mutableListOf<Vec3i>()
+    // A bent body turns at the centre of a cell: one point per turn, all on the arrow's face.
+    val steps = arrow.steps
+    for (i in 1 until steps.size) {
+        if (steps[i] != steps[i - 1]) {
+            points += center(CellRef(face, arrow.cells[i]))
+            normals += frame(face).normal
+        }
+    }
     var ref = arrow.headRef
     var foldsLeft = arrow.kind.folds()
     var length = 2 * arrow.length - 1 // back of tail -> head centre

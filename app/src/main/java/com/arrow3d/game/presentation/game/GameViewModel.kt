@@ -29,6 +29,8 @@ class GameViewModel(
     private val progressRepository: IProgressRepository,
     private val haptics: IHaptics,
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /** Monotonic clock (ms) for the combo window. */
+    private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(GameState(difficulty = difficulty))
@@ -74,15 +76,16 @@ class GameViewModel(
 
     private fun onArrowTapped(arrowId: Int, ambiguous: Boolean) {
         val puzzle = _state.value.puzzle ?: return
-        val result = PuzzleEngine.tap(puzzle, arrowId, ambiguous)
+        val result = PuzzleEngine.tap(puzzle, arrowId, ambiguous, nowMillis = clock())
         when (val outcome = result.outcome) {
             is TapOutcome.Released -> {
-                _state.update { it.copy(puzzle = result.state, hintArrowId = null) }
+                _state.update { it.copy(puzzle = result.state, hintArrowId = null, lastPoints = outcome.points) }
                 emitFx(ArrowFx.Released(outcome.arrowId, outcome.newlyFree, outcome.levelComplete))
                 val arrow = puzzle.level.arrow(arrowId)
                 vibrate(HapticEvent.Released(longArrow = arrow.length >= 3))
                 if (arrow.kind == ArrowKind.TRAVELER) vibrateLater(TRAVELER_FOLD_DELAY_MS, HapticEvent.TravelerFold)
                 if (outcome.newlyFree.size >= 2) vibrateLater(CHAIN_DELAY_MS, HapticEvent.Chain(outcome.newlyFree.size))
+                if (outcome.combo >= 2) vibrateLater(COMBO_DELAY_MS, HapticEvent.Combo(outcome.combo))
                 if (outcome.levelComplete) onLevelComplete()
             }
             is TapOutcome.Blocked -> {
@@ -142,6 +145,7 @@ class GameViewModel(
     private companion object {
         const val TRAVELER_FOLD_DELAY_MS = 140L
         const val CHAIN_DELAY_MS = 180L
+        const val COMBO_DELAY_MS = 90L
         const val LEVEL_COMPLETE_DELAY_MS = 350L
         const val OUT_OF_LIVES_DELAY_MS = 250L
     }

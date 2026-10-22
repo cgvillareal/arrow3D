@@ -1,9 +1,14 @@
 package com.arrow3d.game.presentation.game
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +23,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -32,9 +38,15 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +54,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.arrow3d.domain.engine.ComboRules
 import com.arrow3d.domain.engine.PuzzleEngine
 import com.arrow3d.domain.engine.PuzzleStatus
 import com.arrow3d.domain.generator.Difficulty
@@ -55,6 +68,7 @@ import com.arrow3d.game.presentation.game.cube.rememberCubeCameraState
 import com.arrow3d.game.presentation.model.nameRes
 import com.arrow3d.game.ui.theme.Arrow3dTheme
 import com.arrow3d.game.ui.theme.GameColors
+import kotlinx.coroutines.launch
 
 @Composable
 fun GameScreen(
@@ -99,6 +113,14 @@ fun GameScreen(
                         onArrowTap = { hit -> onEvent(GameEvent.OnArrowTapped(hit.arrowId, hit.ambiguous)) },
                         modifier = Modifier.fillMaxSize(),
                     )
+                    ComboBadge(
+                        combo = state.combo,
+                        points = state.lastPoints,
+                        startedAt = state.comboStartedAt,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 8.dp),
+                    )
                     Text(
                         text = stringResource(R.string.game_rotate_hint),
                         color = GameColors.TextSecondary,
@@ -127,6 +149,7 @@ fun GameScreen(
                     stringResource(R.string.result_lives_lost, state.livesLost)
                 },
                 stars = state.stars,
+                detail = stringResource(R.string.result_score, state.score, state.bestCombo),
                 primaryLabel = stringResource(R.string.result_next),
                 onPrimary = { onEvent(GameEvent.OnNextLevel) },
                 secondaryLabel = stringResource(R.string.result_replay),
@@ -195,15 +218,100 @@ private fun GameHud(state: GameState, onBack: () -> Unit) {
                 .fillMaxWidth()
                 .height(8.dp),
         )
-        Text(
-            text = stringResource(R.string.game_progress, state.removed, state.total),
-            color = GameColors.TextSecondary,
-            fontSize = 12.sp,
-            textAlign = TextAlign.End,
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 4.dp),
-        )
+        ) {
+            Text(
+                text = stringResource(R.string.game_score, state.score),
+                color = GameColors.TextPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = stringResource(R.string.game_progress, state.removed, state.total),
+                color = GameColors.TextSecondary,
+                fontSize = 12.sp,
+                textAlign = TextAlign.End,
+            )
+        }
+    }
+}
+
+/**
+ * Shows the running combo from x2 on. The bar under it drains over the combo window: releasing
+ * another arrow before it empties keeps the combo going. A blocked tap or an undo hides it.
+ */
+@Composable
+private fun ComboBadge(combo: Int, points: Int, startedAt: Long?, modifier: Modifier = Modifier) {
+    val timeLeft = remember { Animatable(0f) }
+    val pop = remember { Animatable(1f) }
+    // Keep the last values while the badge fades out after the combo ends.
+    var shownCombo by remember { mutableIntStateOf(0) }
+    var shownPoints by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(startedAt, combo) {
+        if (startedAt == null || combo < 2) {
+            timeLeft.snapTo(0f)
+            return@LaunchedEffect
+        }
+        shownCombo = combo
+        shownPoints = points
+        launch {
+            pop.snapTo(1.35f)
+            pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+        }
+        timeLeft.snapTo(1f)
+        timeLeft.animateTo(0f, tween(ComboRules.WINDOW_MS.toInt(), easing = LinearEasing))
+    }
+
+    AnimatedVisibility(
+        visible = combo >= 2 && timeLeft.value > 0f,
+        enter = fadeIn(tween(120)) + scaleIn(tween(120), initialScale = 0.7f),
+        exit = fadeOut(tween(220)),
+        modifier = modifier,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .graphicsLayer {
+                    scaleX = pop.value
+                    scaleY = pop.value
+                }
+                .clip(RoundedCornerShape(16.dp))
+                .background(GameColors.Card.copy(alpha = 0.9f))
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.game_combo, shownCombo),
+                    color = GameColors.Star,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 22.sp,
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = stringResource(R.string.game_combo_points, shownPoints),
+                    color = GameColors.TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            LinearProgressIndicator(
+                progress = { timeLeft.value },
+                color = GameColors.Star,
+                trackColor = GameColors.ProgressTrack,
+                strokeCap = StrokeCap.Round,
+                gapSize = 0.dp,
+                drawStopIndicator = {},
+                modifier = Modifier
+                    .width(120.dp)
+                    .height(4.dp),
+            )
+        }
     }
 }
 
@@ -282,6 +390,7 @@ private fun ResultCard(
     title: String,
     subtitle: String,
     stars: Int?,
+    detail: String? = null,
     primaryLabel: String,
     onPrimary: () -> Unit,
     secondaryLabel: String,
@@ -299,6 +408,10 @@ private fun ResultCard(
         Text(title, color = GameColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 24.sp)
         Spacer(Modifier.height(4.dp))
         Text(subtitle, color = GameColors.TextSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
+        if (detail != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(detail, color = GameColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        }
         if (stars != null) {
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
