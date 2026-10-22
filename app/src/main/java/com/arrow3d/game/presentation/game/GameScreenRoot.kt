@@ -6,7 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.arrow3d.domain.generator.Difficulty
+import com.arrow3d.domain.modes.PlayMode
 import com.arrow3d.game.presentation.game.cube.ArrowFxState
 import com.arrow3d.game.presentation.game.cube.rememberCubeCameraState
 import org.koin.androidx.compose.koinViewModel
@@ -14,9 +14,9 @@ import org.koin.core.parameter.parametersOf
 
 @Composable
 fun GameScreenRoot(
-    difficulty: Difficulty,
+    mode: PlayMode,
     onBack: () -> Unit,
-    viewModel: GameViewModel = koinViewModel(key = difficulty.name) { parametersOf(difficulty) },
+    viewModel: GameViewModel = koinViewModel(key = mode.key) { parametersOf(mode) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val camera = rememberCubeCameraState()

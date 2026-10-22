@@ -3,21 +3,30 @@ package com.arrow3d.game.presentation.game
 import androidx.compose.runtime.Immutable
 import com.arrow3d.domain.engine.PuzzleState
 import com.arrow3d.domain.engine.PuzzleStatus
-import com.arrow3d.domain.generator.Difficulty
+import com.arrow3d.domain.modes.PlayMode
 
 @Immutable
 data class GameState(
-    val difficulty: Difficulty,
+    val mode: PlayMode,
     val levelNumber: Int = 1,
+    val gridSize: Int = 0,
     val isLoading: Boolean = true,
     val puzzle: PuzzleState? = null,
     /** Changes every time a puzzle is (re)started, so the UI resets its animations and camera. */
     val session: Int = 0,
     val hintArrowId: Int? = null,
     val vibrationEnabled: Boolean = true,
+    val soundEnabled: Boolean = true,
+    val colorBlind: Boolean = false,
     /** Points the last release scored, shown next to the combo. */
     val lastPoints: Int = 0,
+    /** Place of this win in the mode's local ranking (1 = new record), null when it did not make it. */
+    val recordRank: Int? = null,
+    /** Daily challenge streak after this win. */
+    val dailyStreak: Int = 0,
 ) {
+    val isDaily: Boolean get() = mode == PlayMode.Daily
+
     val status: PuzzleStatus get() = puzzle?.status ?: PuzzleStatus.PLAYING
     val lives: Int? get() = puzzle?.lives
     val maxLives: Int? get() = puzzle?.maxLives

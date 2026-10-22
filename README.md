@@ -7,7 +7,8 @@ Las flechas **largas se doblan** y serpentean entre las otras sin cruzarlas: al 
 una serpiente (la cabeza sigue derecho y el cuerpo va por donde pasó), así que solo las bloquea lo
 que tienen delante de la cabeza.
 
-Esta entrega cubre las **fases 0 y 1** del documento de diseño (prototipo + núcleo jugable).
+Esta entrega cubre las **fases 0 y 1** del documento de diseño (prototipo + núcleo jugable) y suma
+contenido: modo Adaptativo, Desafío diario, récords, sonido y modo daltonismo.
 
 ## Cómo correrlo
 
@@ -33,14 +34,19 @@ Tests:
 | Combos: sacar flechas seguidas (menos de 2,5 s entre una y otra) multiplica los puntos | ✅ hasta ×8; un toque bloqueado o deshacer lo corta |
 | Bloqueo con feedback (rebote, rojo, halo en la flecha que bloquea) | ✅ |
 | Vidas, Deshacer, Pista, Reiniciar con límites por modo | ✅ |
-| 5 modos: Zen, Fácil, Medio, Difícil, Experto | ✅ (Adaptativo figura como "Próximamente") |
+| 5 modos: Zen, Fácil, Medio, Difícil, Experto | ✅ |
+| Modo Adaptativo | ✅ una nota de 0 (Zen) a 4 (Experto) sube con victorias limpias y baja al perder; los sesgos del generador se interpolan entre modos |
+| Desafío diario | ✅ un cubo por día, igual para todos (semilla = fecha); la dificultad sube en la semana; racha de días seguidos |
+| Récords | ✅ top 10 por modo en el dispositivo, con nivel, mejor combo y fecha; "¡Nuevo récord!" al terminar |
+| Sonido | ✅ efectos sintetizados en código (sin archivos), la nota de cada flecha sube con el combo; se puede apagar |
+| Modo daltonismo | ✅ paleta Okabe-Ito y viajeras marcadas con puntos, así el tipo de flecha no depende solo del color |
 | Colores por estado: reposo, bloqueada, saliendo (ámbar → violeta), liberada | ✅ |
 | Rotar con inercia, pellizcar para zoom, doble toque para recentrar | ✅ |
 | Toque generoso, prioridad a la flecha más cercana; un toque ambiguo no resta vida | ✅ |
 | Vibración por evento (liberada, bloqueada, doblez, cadena, nivel completo, sin vidas) | ✅ con primitivas en API 30+ y opción para apagarla |
 | Giro de 360° al terminar y pantalla de resultado con estrellas | ✅ |
 | Progreso por modo y ajuste de vibración guardados (DataStore) | ✅ |
-| Sonido, modo daltonismo, desafío diario, ranking, récord de puntos guardado | ⏳ fases siguientes |
+| Ranking online, música | ⏳ el ranking online necesita un servidor; hoy los récords son locales |
 
 ## Arquitectura
 
@@ -52,13 +58,16 @@ Tests:
   solver/      Solver voraz: sacar una flecha nunca bloquea a otra, así que alcanza
   generator/   LevelGenerator: arma el cubo lleno en orden inverso; Difficulty con los presets
   engine/      PuzzleEngine: tap, vidas, combos y puntos, deshacer, pista, reiniciar (funciones puras)
+  modes/       PlayMode, LevelSpec, AdaptiveDifficulty, DailyChallenge (racha), Leaderboard (top 10)
 
 :app           Android + Jetpack Compose, MVI, Koin
   render/      Proyección 3D, geometría de flechas y detección de toque (Kotlin puro, con tests)
   presentation/game/cube/  CubeView (Canvas + gestos), cámara con inercia, animaciones, renderer
   presentation/game/       GameViewModel, GameState/Event/SideEffect, GameScreenRoot + GameScreen
-  presentation/select/     Selección de modo
-  data/        IProgressRepository + ProgressRepositoryImpl (DataStore)
+  presentation/select/     Selección de modo, desafío diario y ajustes
+  presentation/records/    Récords por modo
+  audio/       ToneSynth (síntesis + WAV, Kotlin puro) y AndroidSoundPlayer (SoundPool)
+  data/        IProgressRepository + ProgressRepositoryImpl (DataStore): niveles, ajustes, adaptativo, diario, récords
   haptics/     IHaptics + AndroidHaptics (VibrationEffect, Composition en API 30+)
 ```
 
@@ -68,6 +77,8 @@ Decisiones:
 - **Una sola geometría para todas las flechas.** Cada flecha se dibuja como un tramo de su `Route`. La misma función dibuja la flecha quieta, saliendo y doblando la arista.
 - **Dificultad por profundidad, no por cantidad.** El generador prefiere flechas con recorridos largos. La profundidad media de la cadena de bloqueos sube de unos 2 en Zen a unos 8 en Experto.
 - **Flechas dobladas sin cerrar salidas.** Una flecha doblada crece desde su celda por celdas vacías, sin meterse en los anillos más cercanos al borde: esas celdas se visitan después y necesitan su propia salida recta. Así el generador nunca tiene que caer al plan de flechas de una celda.
+- **Sonido sin archivos.** Los efectos se sintetizan al arrancar, se guardan como WAV en la caché y se tocan con `SoundPool`. La síntesis es Kotlin puro y tiene tests.
+- **Modos como datos.** Cada modo se reduce a un `LevelSpec` (configuración del generador, semilla y reglas), así el ViewModel juega igual un nivel clásico, uno adaptativo o el diario.
 - **Combos en el dominio.** `PuzzleEngine.tap` recibe la hora del toque, así que la regla del combo es pura y testeable; el ViewModel le pasa un reloj inyectable.
 - **Animaciones en la capa de dibujo.** El reloj de cuadros se lee dentro del `Canvas`, así que animar no recompone la pantalla.
 
@@ -75,6 +86,9 @@ Decisiones:
 
 - `Difficulty`: tamaño de grilla, largo máximo, sesgos de largo y recorrido, probabilidad de viajeras y de dobladas, largo máximo de dobladas, vidas, deshacer y pistas.
 - `ComboRules`: ventana del combo (2,5 s), multiplicador máximo y puntos por flecha.
+- `AdaptiveDifficulty`: cuánto sube o baja la nota por victoria limpia, con ayuda, con vidas perdidas o derrota.
+- `DailyChallenge`: qué dificultad toca cada día de la semana.
+- `SoundBank`: notas, duraciones y timbres de cada sonido.
 - `ArrowFxState`: duraciones de salida (250 a 400 ms), rebote y halo.
 - `CubeCameraState`: sensibilidad de giro, fricción de la inercia, límites de zoom.
 - `HitTest`: radio de toque y umbral de ambigüedad.

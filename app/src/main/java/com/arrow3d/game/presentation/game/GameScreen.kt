@@ -60,6 +60,7 @@ import com.arrow3d.domain.engine.PuzzleStatus
 import com.arrow3d.domain.generator.Difficulty
 import com.arrow3d.domain.generator.GeneratorConfig
 import com.arrow3d.domain.generator.LevelGenerator
+import com.arrow3d.domain.modes.PlayMode
 import com.arrow3d.game.R
 import com.arrow3d.game.presentation.game.cube.ArrowFxState
 import com.arrow3d.game.presentation.game.cube.CubeCameraState
@@ -67,6 +68,7 @@ import com.arrow3d.game.presentation.game.cube.CubeView
 import com.arrow3d.game.presentation.game.cube.rememberCubeCameraState
 import com.arrow3d.game.presentation.model.nameRes
 import com.arrow3d.game.ui.theme.Arrow3dTheme
+import com.arrow3d.game.ui.theme.ArrowPalette
 import com.arrow3d.game.ui.theme.GameColors
 import kotlinx.coroutines.launch
 
@@ -112,6 +114,7 @@ fun GameScreen(
                         enabled = state.status == PuzzleStatus.PLAYING,
                         onArrowTap = { hit -> onEvent(GameEvent.OnArrowTapped(hit.arrowId, hit.ambiguous)) },
                         modifier = Modifier.fillMaxSize(),
+                        palette = ArrowPalette.of(state.colorBlind),
                     )
                     ComboBadge(
                         combo = state.combo,
@@ -141,17 +144,28 @@ fun GameScreen(
             exit = fadeOut(tween(150)),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
+            val lives = if (state.livesLost == 0) {
+                stringResource(R.string.result_no_lives_lost)
+            } else {
+                stringResource(R.string.result_lives_lost, state.livesLost)
+            }
+            val record = when (val rank = state.recordRank) {
+                null -> null
+                1 -> stringResource(R.string.result_new_record)
+                else -> stringResource(R.string.result_rank, rank)
+            }
             ResultCard(
-                title = stringResource(R.string.result_complete),
-                subtitle = if (state.livesLost == 0) {
-                    stringResource(R.string.result_no_lives_lost)
+                title = stringResource(if (state.isDaily) R.string.result_daily_complete else R.string.result_complete),
+                subtitle = if (state.isDaily && state.dailyStreak > 0) {
+                    stringResource(R.string.result_daily_streak, state.dailyStreak, lives)
                 } else {
-                    stringResource(R.string.result_lives_lost, state.livesLost)
+                    lives
                 },
                 stars = state.stars,
-                detail = stringResource(R.string.result_score, state.score, state.bestCombo),
-                primaryLabel = stringResource(R.string.result_next),
-                onPrimary = { onEvent(GameEvent.OnNextLevel) },
+                detail = listOfNotNull(stringResource(R.string.result_score, state.score, state.bestCombo), record).joinToString("\n"),
+                // The daily challenge has no next level: it is one puzzle a day.
+                primaryLabel = stringResource(if (state.isDaily) R.string.result_back else R.string.result_next),
+                onPrimary = { onEvent(if (state.isDaily) GameEvent.OnBack else GameEvent.OnNextLevel) },
                 secondaryLabel = stringResource(R.string.result_replay),
                 onSecondary = { onEvent(GameEvent.OnRestart) },
             )
@@ -189,7 +203,7 @@ private fun GameHud(state: GameState, onBack: () -> Unit) {
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(R.string.game_level, state.levelNumber),
+                    text = if (state.isDaily) stringResource(R.string.mode_daily) else stringResource(R.string.game_level, state.levelNumber),
                     color = GameColors.TextPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp,
@@ -197,8 +211,8 @@ private fun GameHud(state: GameState, onBack: () -> Unit) {
                 Text(
                     text = stringResource(
                         R.string.game_subtitle,
-                        state.difficulty.gridSize,
-                        stringResource(state.difficulty.nameRes()),
+                        state.gridSize,
+                        stringResource(state.mode.nameRes()),
                     ),
                     color = GameColors.TextSecondary,
                     fontSize = 13.sp,
@@ -450,7 +464,13 @@ private fun GameScreenPreview() {
     val puzzle = PuzzleEngine.start(level, difficulty.lives, difficulty.undos, difficulty.hints)
     Arrow3dTheme {
         GameScreen(
-            state = GameState(difficulty = difficulty, levelNumber = 24, isLoading = false, puzzle = puzzle),
+            state = GameState(
+                mode = PlayMode.Classic(difficulty),
+                levelNumber = 24,
+                gridSize = difficulty.gridSize,
+                isLoading = false,
+                puzzle = puzzle,
+            ),
             camera = rememberCubeCameraState(),
             fx = ArrowFxState(),
             onEvent = {},
@@ -463,7 +483,7 @@ private fun GameScreenPreview() {
 private fun GameScreenLoadingPreview() {
     Arrow3dTheme {
         GameScreen(
-            state = GameState(difficulty = Difficulty.EASY),
+            state = GameState(mode = PlayMode.Classic(Difficulty.EASY)),
             camera = rememberCubeCameraState(),
             fx = ArrowFxState(),
             onEvent = {},
