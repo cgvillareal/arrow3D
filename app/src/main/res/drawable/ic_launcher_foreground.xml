@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Isometric cube with two arrows, inside the 66dp safe zone of a 108dp adaptive icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- top -->
+    <path android:fillColor="#4A52A0" android:pathData="M54,26 L78,40 L54,54 L30,40 Z" />
+    <!-- left -->
+    <path android:fillColor="#2E3369" android:pathData="M30,40 L54,54 L54,82 L30,68 Z" />
+    <!-- right -->
+    <path android:fillColor="#3A4086" android:pathData="M78,40 L54,54 L54,82 L78,68 Z" />
+    <!-- arrow on top face -->
+    <path android:fillColor="#2DD4BF" android:pathData="M42,38 L60,48 L62,44 L68,52 L58,52 L60,49 L42,39.5 Z" />
+    <!-- arrow on right face -->
+    <path android:fillColor="#E879F9" android:pathData="M66,72 L66,58 L63,60 L68,50 L72,56 L69,56 L69,70 Z" />
+</vector>

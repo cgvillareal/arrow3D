@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Arrow 3D</string>
+
+    <!-- Mode selection -->
+    <string name="select_title">Elegir dificultad</string>
+    <string name="select_subtitle">Sacá todas las flechas sin que choquen</string>
+    <string name="select_level">Nivel %1$d</string>
+    <string name="select_vibration">Vibración</string>
+    <string name="select_coming_soon">Próximamente</string>
+    <string name="mode_zen">Zen</string>
+    <string name="mode_easy">Fácil</string>
+    <string name="mode_medium">Medio</string>
+    <string name="mode_hard">Difícil</string>
+    <string name="mode_expert">Experto</string>
+    <string name="mode_adaptive">Adaptativo</string>
+    <string name="mode_zen_desc">Sin vidas, sin presión</string>
+    <string name="mode_easy_desc">Cubo 3x3</string>
+    <string name="mode_medium_desc">Cubo 4x4, flechas más largas</string>
+    <string name="mode_hard_desc">Cubo 5x5, aparecen viajeras</string>
+    <string name="mode_expert_desc">Cubo 6x6, muchas viajeras</string>
+    <string name="mode_adaptive_desc">Se ajusta a vos</string>
+
+    <!-- Game -->
+    <string name="game_level">Nivel %1$d</string>
+    <string name="game_subtitle">Cubo %1$dx%1$d | %2$s</string>
+    <string name="game_progress">%1$d / %2$d</string>
+    <string name="game_rotate_hint">Arrastrá para rotar · doble toque para centrar</string>
+    <string name="game_undo">Deshacer</string>
+    <string name="game_hint">Pista</string>
+    <string name="game_restart">Reiniciar</string>
+    <string name="game_count">%1$s (%2$d)</string>
+    <string name="game_unlimited_lives">Sin vidas</string>
+    <string name="game_generating">Armando el cubo…</string>
+
+    <string name="result_complete">Nivel completo</string>
+    <string name="result_no_lives_lost">Sin perder vidas</string>
+    <string name="result_lives_lost">Vidas perdidas: %1$d</string>
+    <string name="result_next">Siguiente nivel</string>
+    <string name="result_replay">Repetir</string>
+    <string name="result_lost">Sin vidas</string>
+    <string name="result_lost_desc">Revisá qué flecha bloquea antes de tocar</string>
+    <string name="result_retry">Reintentar</string>
+    <string name="result_back">Volver</string>
+
+    <!-- Accessibility -->
+    <string name="cd_back">Volver</string>
+    <string name="cd_life">Vida</string>
+    <string name="cd_star">Estrella</string>
+    <string name="cd_cube">Cubo de flechas. Tocá una flecha para sacarla.</string>
+</resources>
