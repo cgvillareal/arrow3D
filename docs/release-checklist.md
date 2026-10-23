@@ -67,7 +67,9 @@ Lo que ya está en el código y lo que tenés que hacer vos en Play Console.
 
 ## Pendiente o para más adelante
 
-- Filtro de apodos ofensivos en el servidor (hoy solo valida largo y caracteres).
+- El filtro de apodos (`NameRules.isOffensive`) es una lista corta de insultos en español e inglés,
+  por palabra entera. Si aparece algo que se escapa, sumalo a la lista; para más, una revisión manual
+  o un servicio de moderación.
 - Logs del hosting: el servidor no guarda IPs, pero el proxy de tu hosting (Fly.io, Railway, nginx)
   puede registrarlas. Revisá su retención o mencioná esos logs en la política de privacidad.
 - Play Integrity, si el ranking atrae bots.

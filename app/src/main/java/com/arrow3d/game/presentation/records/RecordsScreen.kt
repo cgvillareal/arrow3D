@@ -256,13 +256,14 @@ private fun JoinForm(world: WorldState, onEvent: (RecordsEvent) -> Unit) {
             onValueChange = { onEvent(RecordsEvent.OnNameChanged(it)) },
             placeholder = { Text(stringResource(R.string.records_join_hint)) },
             singleLine = true,
-            isError = world.joinError == JoinError.INVALID_NAME,
+            isError = world.joinError == JoinError.INVALID_NAME || world.joinError == JoinError.OFFENSIVE_NAME,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { onEvent(RecordsEvent.OnJoin) }),
             modifier = Modifier.fillMaxWidth(),
         )
         when (world.joinError) {
             JoinError.INVALID_NAME -> Text(stringResource(R.string.records_join_invalid), color = GameColors.ArrowBlocked, fontSize = 12.sp)
+            JoinError.OFFENSIVE_NAME -> Text(stringResource(R.string.records_join_offensive), color = GameColors.ArrowBlocked, fontSize = 12.sp)
             JoinError.CONNECTION -> Text(stringResource(R.string.records_world_error), color = GameColors.ArrowBlocked, fontSize = 12.sp)
             null -> Unit
         }

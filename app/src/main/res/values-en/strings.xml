@@ -75,6 +75,7 @@
     <string name="records_join_hint">Nickname (3 to 16 letters or digits)</string>
     <string name="records_join_button">Join</string>
     <string name="records_join_invalid">Use 3 to 16 letters, digits, spaces, _ or -</string>
+    <string name="records_join_offensive">That nickname is not allowed. Pick another one.</string>
     <string name="records_playing_as">Playing as %1$s</string>
     <string name="records_world_error">Could not reach the ranking</string>
     <string name="records_world_retry">Try again</string>

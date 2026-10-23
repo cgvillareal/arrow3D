@@ -22,7 +22,7 @@ import java.time.LocalDate
 
 enum class RecordsTab { LOCAL, WORLD }
 
-enum class JoinError { INVALID_NAME, CONNECTION }
+enum class JoinError { INVALID_NAME, OFFENSIVE_NAME, CONNECTION }
 
 @Immutable
 data class WorldState(
@@ -117,7 +117,8 @@ class RecordsViewModel(
         val world = _state.value.world
         if (world.joining) return
         if (!NameRules.isValid(world.nameInput)) {
-            updateWorld { it.copy(joinError = JoinError.INVALID_NAME) }
+            val error = if (NameRules.isOffensive(world.nameInput)) JoinError.OFFENSIVE_NAME else JoinError.INVALID_NAME
+            updateWorld { it.copy(joinError = error) }
             return
         }
         updateWorld { it.copy(joining = true, joinError = null) }

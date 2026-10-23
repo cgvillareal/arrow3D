@@ -81,6 +81,7 @@
     <string name="records_join_hint">Apodo (3 a 16 letras o números)</string>
     <string name="records_join_button">Unirme</string>
     <string name="records_join_invalid">Usá de 3 a 16 letras, números, espacios, _ o -</string>
+    <string name="records_join_offensive">Ese apodo no está permitido. Elegí otro.</string>
     <string name="records_playing_as">Jugás como %1$s</string>
     <string name="records_world_error">No se pudo conectar con el ranking</string>
     <string name="records_world_retry">Reintentar</string>

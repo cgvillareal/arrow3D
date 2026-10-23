@@ -95,6 +95,22 @@ class RunVerifierTest {
     }
 
     @Test
+    fun `offensive nicknames are refused, even disguised`() {
+        listOf("puto", "PUTO", "Puuuto", "p_u-t0", "Hijo de Puta", "hdp", "pel0tud0", "Fuck_You", "sh1t", "Cabrón", "N4zi").forEach {
+            assertTrue(it, NameRules.isOffensive(it))
+            assertFalse(it, NameRules.isValid(it))
+        }
+    }
+
+    @Test
+    fun `normal names that contain a bad word inside are fine`() {
+        listOf("Computadora", "Pijama", "Vergara", "Maricarmen", "Grapes", "Dickens", "Escultor", "Pasta", "Ana", "Gabi 78", "Conchita").forEach {
+            assertFalse(it, NameRules.isOffensive(it))
+            assertTrue(it, NameRules.isValid(it))
+        }
+    }
+
+    @Test
     fun `protocol round trips through json`() {
         val run = RunSubmission("adaptive", 4, day, rating = 1.5, actions = listOf(RunAction(ActionType.TAP, 10, 3, ambiguous = true)))
         val text = Api.json.encodeToString(RunSubmission.serializer(), run)

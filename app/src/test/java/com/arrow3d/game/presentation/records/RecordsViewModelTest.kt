@@ -120,6 +120,10 @@ class RecordsViewModelTest {
         vm.onEvent(RecordsEvent.OnJoin)
         assertEquals(JoinError.INVALID_NAME, vm.state.value.world.joinError)
 
+        vm.onEvent(RecordsEvent.OnNameChanged("p_u-t0"))
+        vm.onEvent(RecordsEvent.OnJoin)
+        assertEquals(JoinError.OFFENSIVE_NAME, vm.state.value.world.joinError)
+
         vm.onEvent(RecordsEvent.OnNameChanged("taken"))
         vm.onEvent(RecordsEvent.OnJoin)
         advanceUntilIdle()

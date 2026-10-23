@@ -99,7 +99,7 @@ object ApiErrors {
     const val BAD_REQUEST = "bad_request"
 }
 
-/** Nicknames: 3 to 16 letters, digits, spaces, '_' or '-', trimmed. */
+/** Nicknames: 3 to 16 letters, digits, spaces, '_' or '-', trimmed, and not offensive. */
 object NameRules {
     const val MIN = 3
     const val MAX = 16
@@ -109,6 +109,50 @@ object NameRules {
 
     fun isValid(raw: String): Boolean {
         val name = normalize(raw)
-        return name.length in MIN..MAX && allowed.matches(name)
+        return name.length in MIN..MAX && allowed.matches(name) && !isOffensive(name)
     }
+
+    /**
+     * A small blocklist of insults and slurs in Spanish and English. Each word of the name (split
+     * on spaces, '_' and '-'), and the whole name, is compared after folding case, accents, common
+     * digit-for-letter swaps and repeated letters, so "P-U_T0 amo" and "puuuto" are caught.
+     * Whole words only: matching inside words would refuse "Computadora", "Pijama" or "Vergara".
+     * It is a first line of defence, not a guarantee.
+     */
+    fun isOffensive(raw: String): Boolean {
+        val words = raw.split(Regex("[\\s_-]+")).filter { it.isNotEmpty() }.map(::fold)
+        return (words + fold(raw)).any { it in BLOCKED }
+    }
+
+    private fun fold(text: String): String {
+        val noAccents = java.text.Normalizer.normalize(text.lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+        val letters = buildString {
+            for (c in noAccents) {
+                when (c) {
+                    '0' -> append('o')
+                    '1', '!' -> append('i')
+                    '3' -> append('e')
+                    '4', '@' -> append('a')
+                    '5', '$' -> append('s')
+                    '7' -> append('t')
+                    else -> if (c.isLetter()) append(c)
+                }
+            }
+        }
+        // "puuuto" -> "puto"
+        return letters.replace(Regex("(.)\\1+"), "$1")
+    }
+
+    /** Folded form (no accents, no repeated letters). */
+    private val BLOCKED = listOf(
+        // Spanish
+        "puto", "puta", "pelotudo", "pelotuda", "boludo", "boluda", "forro", "concha", "pija",
+        "verga", "chinga", "cabron", "maricon", "marica", "trolo", "mogolico", "pendejo", "pendeja",
+        "gilipolas", "hijodeputa", "hdp", "culiao", "culero", "mierda", "coño", "zorra",
+        "negrodemierda", "sudaca", "nazi", "hitler", "violar", "violador",
+        // English
+        "fuck", "fuk", "shit", "bitch", "cunt", "dick", "pusy", "whore", "slut", "nigger",
+        "nigga", "faget", "fag", "retard", "rape", "rapist", "asshole", "bastard", "wanker", "twat",
+    ).map { fold(it) }.toSet()
 }
