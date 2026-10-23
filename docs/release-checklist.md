@@ -73,4 +73,4 @@ Lo que ya está en el código y lo que tenés que hacer vos en Play Console.
 - Logs del hosting: el servidor no guarda IPs, pero el proxy de tu hosting (Fly.io, Railway, nginx)
   puede registrarlas. Revisá su retención o mencioná esos logs en la política de privacidad.
 - Play Integrity, si el ranking atrae bots.
-- Capturas y textos de la ficha.
+- Capturas de la ficha (los textos están en `docs/store-listing.md`).
