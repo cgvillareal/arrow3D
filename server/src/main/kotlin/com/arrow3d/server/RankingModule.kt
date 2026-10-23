@@ -31,6 +31,8 @@ import io.ktor.server.request.header
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
+import io.ktor.http.ContentType
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
@@ -100,6 +102,7 @@ fun Application.rankingModule(
 
     routing {
         get("/health") { call.respondText("ok") }
+        get("/privacy") { call.respondText(PrivacyPolicy.html, ContentType.Text.Html) }
 
         rateLimit(REGISTER_LIMIT) {
             post(Api.PLAYERS) {
@@ -116,6 +119,12 @@ fun Application.rankingModule(
             if (!NameRules.isValid(name)) return@patch call.fail(HttpStatusCode.BadRequest, ApiErrors.INVALID_NAME, NAME_HELP)
             val renamed = store.rename(player.id, name) ?: player
             call.respond(PlayerResponse(renamed.id, renamed.name))
+        }
+
+        delete(Api.ME) {
+            val player = call.player() ?: return@delete call.fail(HttpStatusCode.Unauthorized, ApiErrors.UNAUTHORIZED, "unknown token")
+            store.deletePlayer(player.id)
+            call.respond(HttpStatusCode.NoContent)
         }
 
         rateLimit(RUNS_LIMIT) {

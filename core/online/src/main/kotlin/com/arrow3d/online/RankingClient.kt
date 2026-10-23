@@ -37,6 +37,10 @@ class RankingClient(
     suspend fun rename(token: String, name: String): ApiResult<PlayerResponse> =
         call("PATCH", Api.ME, token, RenameRequest(name), RenameRequest.serializer(), PlayerResponse.serializer())
 
+    /** Deletes the player and all their scores from the server. */
+    suspend fun deleteAccount(token: String): ApiResult<Unit> =
+        call<Unit, Unit>("DELETE", Api.ME, token, null, null, null)
+
     suspend fun submit(token: String, run: RunSubmission): ApiResult<RunResult> =
         call("POST", Api.RUNS, token, run, RunSubmission.serializer(), RunResult.serializer())
 
@@ -56,7 +60,8 @@ class RankingClient(
         token: String?,
         body: B?,
         bodySerializer: KSerializer<B>?,
-        responseSerializer: KSerializer<R>,
+        /** Null when the answer has no body (204); the result is then Unit. */
+        responseSerializer: KSerializer<R>?,
     ): ApiResult<R> = withContext(dispatcher) {
         try {
             val connection = (URL(base + path).openConnection() as HttpURLConnection).apply {
@@ -82,7 +87,9 @@ class RankingClient(
                 val stream = if (status in 200..299) connection.inputStream else connection.errorStream
                 val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 if (status in 200..299) {
-                    ApiResult.Ok(Api.json.decodeFromString(responseSerializer, text))
+                    @Suppress("UNCHECKED_CAST")
+                    val value = if (responseSerializer == null) Unit as R else Api.json.decodeFromString(responseSerializer, text)
+                    ApiResult.Ok(value)
                 } else {
                     val error = runCatching { Api.json.decodeFromString(ErrorResponse.serializer(), text) }.getOrNull()
                     ApiResult.Failed(status, error?.error, error?.message)

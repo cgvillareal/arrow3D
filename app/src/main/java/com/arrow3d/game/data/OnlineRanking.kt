@@ -40,8 +40,14 @@ interface IOnlineRanking {
     /** False when the build has no server URL: the online ranking is hidden. */
     val isConfigured: Boolean
 
+    /** Web page with the privacy policy, served by the ranking server; null when not configured. */
+    val privacyUrl: String?
+
     fun observeAccount(): Flow<OnlineAccount?>
     suspend fun join(name: String): ApiResult<OnlineAccount>
+
+    /** Deletes the account and its scores on the server, then forgets it on this device. */
+    suspend fun leave(): ApiResult<Unit>
     suspend fun submit(run: RunSubmission): SubmitOutcome
     suspend fun leaderboard(modeKey: String, day: Long): ApiResult<LeaderboardResponse>
 
@@ -64,6 +70,8 @@ class OnlineRankingImpl(context: Context, baseUrl: String) : IOnlineRanking {
     private val runsSerializer = ListSerializer(RunSubmission.serializer())
 
     override val isConfigured: Boolean get() = client != null
+
+    override val privacyUrl: String? = baseUrl.takeIf { it.isNotBlank() }?.trimEnd('/')?.plus("/privacy")
 
     override fun observeAccount(): Flow<OnlineAccount?> = store.data.map { prefs ->
         val id = prefs[idKey]
@@ -88,6 +96,22 @@ class OnlineRankingImpl(context: Context, baseUrl: String) : IOnlineRanking {
             is ApiResult.Failed -> result
             is ApiResult.Unreachable -> result
         }
+    }
+
+    override suspend fun leave(): ApiResult<Unit> {
+        val api = client ?: return ApiResult.Failed(0, null, "ranking not configured")
+        val account = observeAccount().first() ?: return ApiResult.Ok(Unit)
+        val result = api.deleteAccount(account.token)
+        // 401: the server no longer knows this token, so there is nothing left to delete there.
+        val gone = result is ApiResult.Ok || (result is ApiResult.Failed && result.status == HTTP_UNAUTHORIZED)
+        if (!gone) return result
+        store.edit {
+            it.remove(idKey)
+            it.remove(nameKey)
+            it.remove(tokenKey)
+            it.remove(pendingKey)
+        }
+        return ApiResult.Ok(Unit)
     }
 
     override suspend fun submit(run: RunSubmission): SubmitOutcome {
@@ -143,5 +167,6 @@ class OnlineRankingImpl(context: Context, baseUrl: String) : IOnlineRanking {
     private companion object {
         const val MAX_PENDING = 20
         const val HTTP_TOO_MANY_REQUESTS = 429
+        const val HTTP_UNAUTHORIZED = 401
     }
 }

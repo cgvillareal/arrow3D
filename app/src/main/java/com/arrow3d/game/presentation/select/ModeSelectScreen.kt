@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -46,7 +48,9 @@ import com.arrow3d.game.presentation.model.descriptionRes
 import com.arrow3d.game.presentation.model.nameRes
 import com.arrow3d.game.ui.theme.Arrow3dTheme
 import com.arrow3d.game.ui.theme.GameColors
+import com.arrow3d.game.data.IOnlineRanking
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 @Composable
 fun ModeSelectScreenRoot(
@@ -54,6 +58,7 @@ fun ModeSelectScreenRoot(
     onOpenRecords: () -> Unit,
     onOpenAchievements: () -> Unit,
     viewModel: ModeSelectViewModel = koinViewModel(),
+    online: IOnlineRanking = koinInject(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val currentOnOpenGame by rememberUpdatedState(onOpenGame)
@@ -68,11 +73,11 @@ fun ModeSelectScreenRoot(
             }
         }
     }
-    ModeSelectScreen(state = state, onEvent = viewModel::onEvent)
+    ModeSelectScreen(state = state, onEvent = viewModel::onEvent, privacyUrl = online.privacyUrl)
 }
 
 @Composable
-fun ModeSelectScreen(state: ModeSelectState, onEvent: (ModeSelectEvent) -> Unit) {
+fun ModeSelectScreen(state: ModeSelectState, onEvent: (ModeSelectEvent) -> Unit, privacyUrl: String? = null) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -191,6 +196,12 @@ fun ModeSelectScreen(state: ModeSelectState, onEvent: (ModeSelectEvent) -> Unit)
                 checked = state.settings.colorBlind,
                 onChange = { onEvent(ModeSelectEvent.OnColorBlindToggled(it)) },
             )
+        }
+        if (privacyUrl != null) {
+            val uriHandler = LocalUriHandler.current
+            TextButton(onClick = { uriHandler.openUri(privacyUrl) }, modifier = Modifier.padding(top = 8.dp)) {
+                Text(stringResource(R.string.select_privacy), color = GameColors.TextSecondary, fontSize = 13.sp)
+            }
         }
     }
 }

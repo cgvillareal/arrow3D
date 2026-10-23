@@ -62,7 +62,13 @@ private class FakeServer(override val isConfigured: Boolean = true) : IOnlineRan
     val account = MutableStateFlow<OnlineAccount?>(null)
     var reachable = true
     val requested = mutableListOf<Pair<String, Long>>()
+    override val privacyUrl: String? = null
     override fun observeAccount(): Flow<OnlineAccount?> = account
+    override suspend fun leave(): ApiResult<Unit> {
+        if (!reachable) return ApiResult.Unreachable(java.io.IOException("offline"))
+        account.value = null
+        return ApiResult.Ok(Unit)
+    }
     override suspend fun join(name: String): ApiResult<OnlineAccount> {
         if (!reachable) return ApiResult.Unreachable(java.io.IOException("offline"))
         if (name == "taken") return ApiResult.Failed(400, ApiErrors.INVALID_NAME, null)
@@ -158,5 +164,32 @@ class RecordsViewModelTest {
         advanceUntilIdle()
         assertFalse(vm.state.value.world.configured)
         assertTrue(server.requested.isEmpty())
+    }
+
+    @Test
+    fun `deleting the account asks first and brings the join form back`() = runTest(dispatcher) {
+        val server = FakeServer().apply { account.value = OnlineAccount("me", "Ana", "t") }
+        val vm = RecordsViewModel(LocalOnly(local), server, today = { 99 })
+        vm.onEvent(RecordsEvent.OnTabSelected(RecordsTab.WORLD))
+        advanceUntilIdle()
+        vm.onEvent(RecordsEvent.OnDeleteRequested)
+        assertTrue(vm.state.value.world.confirmingDelete)
+        vm.onEvent(RecordsEvent.OnDeleteCancelled)
+        assertEquals("Ana", vm.state.value.world.account?.name)
+
+        server.reachable = false
+        vm.onEvent(RecordsEvent.OnDeleteRequested)
+        vm.onEvent(RecordsEvent.OnDeleteConfirmed)
+        advanceUntilIdle()
+        assertTrue(vm.state.value.world.deleteFailed)
+        assertEquals("Ana", vm.state.value.world.account?.name)
+
+        server.reachable = true
+        vm.onEvent(RecordsEvent.OnDeleteRequested)
+        vm.onEvent(RecordsEvent.OnDeleteConfirmed)
+        advanceUntilIdle()
+        assertNull(vm.state.value.world.account)
+        assertFalse(vm.state.value.world.deleteFailed)
+        assertNull(vm.state.value.world.board)
     }
 }

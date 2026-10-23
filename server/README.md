@@ -24,6 +24,8 @@ así que verifica las partidas con el mismo motor que usa la app.
 | `GET` | `/health` | Chequeo de vida (`ok`) |
 | `POST` | `/v1/players` `{"name"}` | Crear jugador; devuelve `id`, `name` y `token` |
 | `PATCH` | `/v1/players/me` `{"name"}` | Cambiar el apodo (también `POST` con `X-HTTP-Method-Override: PATCH`) |
+| `DELETE` | `/v1/players/me` | Borrar el jugador y todos sus puntajes |
+| `GET` | `/privacy` | Política de privacidad (la URL que va en la ficha de Play Store) |
 | `POST` | `/v1/runs` | Enviar una partida ganada (`Authorization: Bearer <token>`) |
 | `GET` | `/v1/leaderboards/{modo}?day=&limit=` | Tabla de un modo; con token incluye `me` |
 

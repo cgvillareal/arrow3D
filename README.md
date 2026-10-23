@@ -55,6 +55,7 @@ ver [server/README.md](server/README.md).
 | Tutorial | ✅ siete lecciones hechas a mano (tocar, bloqueos, cadenas, largas, dobladas, viajeras, combos), solo en las caras que se ven al empezar |
 | Música | ✅ generativa, sintetizada en tiempo real; el arpegio y los destellos entran con el combo y se calman cuando vence |
 | Logros y estadísticas | ✅ 14 logros calculados a partir de las estadísticas acumuladas; se avisan en la tarjeta de resultado |
+| Publicación | ✅ español e inglés, release minificado y firmado por propiedades, pantalla de inicio, ícono temático, política de privacidad y borrado de cuenta del ranking. Ver [docs/release-checklist.md](docs/release-checklist.md) |
 
 ## Arquitectura
 

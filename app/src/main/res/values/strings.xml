@@ -86,6 +86,12 @@
     <string name="records_world_retry">Reintentar</string>
     <string name="records_world_today">Desafío de hoy</string>
     <string name="records_world_me">Tu puesto</string>
+    <string name="records_delete_account">Borrar mi cuenta del ranking</string>
+    <string name="records_delete_title">¿Borrar tu cuenta del ranking?</string>
+    <string name="records_delete_body">Se borran del servidor tu apodo y todos tus puntajes mundiales. Tus récords en este dispositivo no cambian.</string>
+    <string name="records_delete_confirm">Borrar</string>
+    <string name="records_delete_cancel">Cancelar</string>
+    <string name="select_privacy">Política de privacidad</string>
 
     <!-- Tutorial -->
     <string name="mode_tutorial">Tutorial</string>

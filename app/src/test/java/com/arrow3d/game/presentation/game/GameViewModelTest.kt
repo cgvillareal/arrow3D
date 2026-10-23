@@ -102,7 +102,9 @@ private class FakeOnline(override val isConfigured: Boolean = true) : IOnlineRan
     val submitted = mutableListOf<RunSubmission>()
     var outcome: (RunSubmission) -> SubmitOutcome = { SubmitOutcome.Ranked(RunResult(score = 1, bestCombo = 1, rank = 7, improved = true)) }
     override fun observeAccount(): Flow<OnlineAccount?> = MutableStateFlow(OnlineAccount("id", "Ana", "token"))
+    override val privacyUrl: String? = null
     override suspend fun join(name: String): ApiResult<OnlineAccount> = ApiResult.Ok(OnlineAccount("id", name, "token"))
+    override suspend fun leave(): ApiResult<Unit> = ApiResult.Ok(Unit)
     override suspend fun submit(run: RunSubmission): SubmitOutcome {
         submitted += run
         return outcome(run)

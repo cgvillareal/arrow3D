@@ -26,6 +26,9 @@ interface RankingStore {
     fun playerByToken(token: String): Player?
     fun rename(playerId: String, name: String): Player?
 
+    /** Deletes the player and every score they had. Returns false if there was no such player. */
+    fun deletePlayer(playerId: String): Boolean
+
     /** Keeps [run] if it beats the player's best on [board]. Returns true when it did. */
     fun submit(playerId: String, board: BoardKey, run: BestRun): Boolean
     fun entryOf(playerId: String, board: BoardKey): LeaderboardEntry?
@@ -95,6 +98,28 @@ class SqliteRankingStore(path: String, private val clock: () -> Long = System::c
             it.executeUpdate()
         }
         return if (changed == 1) Player(playerId, name) else null
+    }
+
+    @Synchronized
+    override fun deletePlayer(playerId: String): Boolean {
+        connection.autoCommit = false
+        try {
+            connection.prepareStatement("DELETE FROM bests WHERE player_id = ?").use {
+                it.setString(1, playerId)
+                it.executeUpdate()
+            }
+            val deleted = connection.prepareStatement("DELETE FROM players WHERE id = ?").use {
+                it.setString(1, playerId)
+                it.executeUpdate()
+            }
+            connection.commit()
+            return deleted == 1
+        } catch (e: java.sql.SQLException) {
+            connection.rollback()
+            throw e
+        } finally {
+            connection.autoCommit = true
+        }
     }
 
     @Synchronized

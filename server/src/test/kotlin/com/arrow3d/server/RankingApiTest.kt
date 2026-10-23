@@ -16,6 +16,7 @@ import com.arrow3d.online.RankingClient
 import com.arrow3d.online.RunAction
 import com.arrow3d.online.RunResult
 import com.arrow3d.online.RunSubmission
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -170,6 +171,25 @@ class RankingApiTest {
     }
 
     @Test
+    fun `players can delete their account and scores`() = api {
+        val ana = register("Ana")
+        submit(ana.token!!, solvedRun("easy", Difficulty.EASY, 2))
+        val response = client.delete(Api.ME) { header("Authorization", "Bearer ${ana.token}") }
+        assertEquals(HttpStatusCode.NoContent, response.status)
+        assertTrue(board("easy").entries.isEmpty())
+        // the token no longer works
+        assertEquals(HttpStatusCode.Unauthorized, submit(ana.token!!, solvedRun("easy", Difficulty.EASY, 2)).status)
+        assertEquals(HttpStatusCode.Unauthorized, client.delete(Api.ME).status)
+    }
+
+    @Test
+    fun `the privacy policy is served`() = api {
+        val response = client.get("/privacy")
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertTrue(response.bodyAsText().contains("Política de privacidad"))
+    }
+
+    @Test
     fun `registrations are rate limited`() = api(RateLimits(registrations = 2, registrationPeriod = 1.hours)) {
         register("Uno")
         register("Dos")
@@ -197,6 +217,9 @@ class RankingApiTest {
                 val refused = client.submit(player.token!!, solvedRun("hard", Difficulty.HARD, 5).let { it.copy(actions = it.actions.take(3)) })
                 assertEquals(ApiErrors.INVALID_RUN, (refused as ApiResult.Failed).error)
                 assertEquals(422, refused.status)
+
+                assertTrue(client.deleteAccount(player.token!!) is ApiResult.Ok)
+                assertTrue((client.leaderboard("hard") as ApiResult.Ok).value.entries.isEmpty())
 
                 val offline = RankingClient("http://127.0.0.1:1").leaderboard("easy")
                 assertTrue(offline is ApiResult.Unreachable)

@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -67,6 +68,7 @@ fun RecordsScreenRoot(onBack: () -> Unit, viewModel: RecordsViewModel = koinView
 
 @Composable
 fun RecordsScreen(state: RecordsState, onBack: () -> Unit, onEvent: (RecordsEvent) -> Unit) {
+    if (state.world.confirmingDelete) DeleteAccountDialog(onEvent)
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -139,6 +141,18 @@ fun RecordsScreen(state: RecordsState, onBack: () -> Unit, onEvent: (RecordsEven
 }
 
 private fun LazyListScope.worldItems(world: WorldState, onEvent: (RecordsEvent) -> Unit) {
+    if (world.account != null) {
+        item(key = "delete_account") {
+            Column(modifier = Modifier.padding(top = 4.dp)) {
+                TextButton(onClick = { onEvent(RecordsEvent.OnDeleteRequested) }, enabled = !world.deleting) {
+                    Text(stringResource(R.string.records_delete_account), color = GameColors.TextSecondary, fontSize = 13.sp)
+                }
+                if (world.deleteFailed) {
+                    Text(stringResource(R.string.records_world_error), color = GameColors.ArrowBlocked, fontSize = 12.sp)
+                }
+            }
+        }
+    }
     when {
         !world.configured -> item { Message(stringResource(R.string.records_world_off)) }
         !world.accountLoaded -> item { Loading() }
@@ -200,6 +214,28 @@ private fun LazyListScope.worldItems(world: WorldState, onEvent: (RecordsEvent) 
             }
         }
     }
+}
+
+@Composable
+private fun DeleteAccountDialog(onEvent: (RecordsEvent) -> Unit) {
+    AlertDialog(
+        onDismissRequest = { onEvent(RecordsEvent.OnDeleteCancelled) },
+        title = { Text(stringResource(R.string.records_delete_title)) },
+        text = { Text(stringResource(R.string.records_delete_body)) },
+        confirmButton = {
+            TextButton(onClick = { onEvent(RecordsEvent.OnDeleteConfirmed) }) {
+                Text(stringResource(R.string.records_delete_confirm), color = GameColors.ArrowBlocked)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { onEvent(RecordsEvent.OnDeleteCancelled) }) {
+                Text(stringResource(R.string.records_delete_cancel))
+            }
+        },
+        containerColor = GameColors.Card,
+        titleContentColor = GameColors.TextPrimary,
+        textContentColor = GameColors.TextSecondary,
+    )
 }
 
 @Composable

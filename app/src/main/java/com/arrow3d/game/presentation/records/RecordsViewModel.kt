@@ -37,6 +37,10 @@ data class WorldState(
     val loading: Boolean = false,
     val failed: Boolean = false,
     val board: LeaderboardResponse? = null,
+    /** Asking "are you sure?" before deleting the ranking account. */
+    val confirmingDelete: Boolean = false,
+    val deleting: Boolean = false,
+    val deleteFailed: Boolean = false,
 )
 
 @Immutable
@@ -53,6 +57,9 @@ sealed interface RecordsEvent {
     data object OnJoin : RecordsEvent
     data class OnWorldModeSelected(val mode: PlayMode) : RecordsEvent
     data object OnRetry : RecordsEvent
+    data object OnDeleteRequested : RecordsEvent
+    data object OnDeleteCancelled : RecordsEvent
+    data object OnDeleteConfirmed : RecordsEvent
 }
 
 /** Local records and the online ranking. */
@@ -100,6 +107,9 @@ class RecordsViewModel(
                 loadBoard()
             }
             RecordsEvent.OnRetry -> loadBoard()
+            RecordsEvent.OnDeleteRequested -> updateWorld { it.copy(confirmingDelete = true, deleteFailed = false) }
+            RecordsEvent.OnDeleteCancelled -> updateWorld { it.copy(confirmingDelete = false) }
+            RecordsEvent.OnDeleteConfirmed -> deleteAccount()
         }
     }
 
@@ -119,6 +129,16 @@ class RecordsViewModel(
             }
             // On success the account flow fills in the account and loads the board.
             updateWorld { it.copy(joining = false, joinError = error) }
+        }
+    }
+
+    private fun deleteAccount() {
+        if (_state.value.world.deleting) return
+        updateWorld { it.copy(confirmingDelete = false, deleting = true, deleteFailed = false) }
+        viewModelScope.launch {
+            val ok = online.leave() is ApiResult.Ok
+            // On success the account flow turns to null and the join form comes back.
+            updateWorld { it.copy(deleting = false, deleteFailed = !ok, board = if (ok) null else it.board) }
         }
     }
 
