@@ -60,13 +60,16 @@ import com.arrow3d.domain.engine.PuzzleStatus
 import com.arrow3d.domain.generator.Difficulty
 import com.arrow3d.domain.generator.GeneratorConfig
 import com.arrow3d.domain.generator.LevelGenerator
+import com.arrow3d.domain.modes.LessonTopic
 import com.arrow3d.domain.modes.PlayMode
 import com.arrow3d.game.R
 import com.arrow3d.game.presentation.game.cube.ArrowFxState
 import com.arrow3d.game.presentation.game.cube.CubeCameraState
 import com.arrow3d.game.presentation.game.cube.CubeView
 import com.arrow3d.game.presentation.game.cube.rememberCubeCameraState
+import com.arrow3d.game.presentation.model.bodyRes
 import com.arrow3d.game.presentation.model.nameRes
+import com.arrow3d.game.presentation.model.titleRes
 import com.arrow3d.game.ui.theme.Arrow3dTheme
 import com.arrow3d.game.ui.theme.ArrowPalette
 import com.arrow3d.game.ui.theme.GameColors
@@ -124,14 +127,26 @@ fun GameScreen(
                             .align(Alignment.TopCenter)
                             .padding(top = 8.dp),
                     )
-                    Text(
-                        text = stringResource(R.string.game_rotate_hint),
-                        color = GameColors.TextSecondary,
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 8.dp),
-                    )
+                    val lesson = state.lesson
+                    if (lesson != null) {
+                        LessonCard(
+                            topic = lesson,
+                            number = state.levelNumber,
+                            count = state.lessonCount,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.game_rotate_hint),
+                            color = GameColors.TextSecondary,
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 8.dp),
+                        )
+                    }
                 }
             }
 
@@ -144,35 +159,48 @@ fun GameScreen(
             exit = fadeOut(tween(150)),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
-            val lives = if (state.livesLost == 0) {
-                stringResource(R.string.result_no_lives_lost)
+            if (state.isTutorial) {
+                ResultCard(
+                    title = stringResource(if (state.isLastLesson) R.string.tutorial_complete else R.string.tutorial_well_done),
+                    subtitle = stringResource(if (state.isLastLesson) R.string.tutorial_complete_desc else R.string.tutorial_well_done_desc),
+                    stars = null,
+                    detail = achievementLines(state).ifEmpty { null }?.joinToString("\n"),
+                    primaryLabel = stringResource(if (state.isLastLesson) R.string.tutorial_finish else R.string.tutorial_next),
+                    onPrimary = { onEvent(GameEvent.OnNextLevel) },
+                    secondaryLabel = stringResource(R.string.result_replay),
+                    onSecondary = { onEvent(GameEvent.OnRestart) },
+                )
             } else {
-                stringResource(R.string.result_lives_lost, state.livesLost)
-            }
-            val record = when (val rank = state.recordRank) {
-                null -> null
-                1 -> stringResource(R.string.result_new_record)
-                else -> stringResource(R.string.result_rank, rank)
-            }
-            ResultCard(
-                title = stringResource(if (state.isDaily) R.string.result_daily_complete else R.string.result_complete),
-                subtitle = if (state.isDaily && state.dailyStreak > 0) {
-                    stringResource(R.string.result_daily_streak, state.dailyStreak, lives)
+                val lives = if (state.livesLost == 0) {
+                    stringResource(R.string.result_no_lives_lost)
                 } else {
-                    lives
-                },
-                stars = state.stars,
-                detail = listOfNotNull(
-                    stringResource(R.string.result_score, state.score, state.bestCombo),
-                    record,
-                    onlineLine(state.online),
-                ).joinToString("\n"),
-                // The daily challenge has no next level: it is one puzzle a day.
-                primaryLabel = stringResource(if (state.isDaily) R.string.result_back else R.string.result_next),
-                onPrimary = { onEvent(if (state.isDaily) GameEvent.OnBack else GameEvent.OnNextLevel) },
-                secondaryLabel = stringResource(R.string.result_replay),
-                onSecondary = { onEvent(GameEvent.OnRestart) },
-            )
+                    stringResource(R.string.result_lives_lost, state.livesLost)
+                }
+                val record = when (val rank = state.recordRank) {
+                    null -> null
+                    1 -> stringResource(R.string.result_new_record)
+                    else -> stringResource(R.string.result_rank, rank)
+                }
+                ResultCard(
+                    title = stringResource(if (state.isDaily) R.string.result_daily_complete else R.string.result_complete),
+                    subtitle = if (state.isDaily && state.dailyStreak > 0) {
+                        stringResource(R.string.result_daily_streak, state.dailyStreak, lives)
+                    } else {
+                        lives
+                    },
+                    stars = state.stars,
+                    detail = listOfNotNull(
+                        stringResource(R.string.result_score, state.score, state.bestCombo),
+                        record,
+                        onlineLine(state.online),
+                    ).plus(achievementLines(state)).joinToString("\n"),
+                    // The daily challenge has no next level: it is one puzzle a day.
+                    primaryLabel = stringResource(if (state.isDaily) R.string.result_back else R.string.result_next),
+                    onPrimary = { onEvent(if (state.isDaily) GameEvent.OnBack else GameEvent.OnNextLevel) },
+                    secondaryLabel = stringResource(R.string.result_replay),
+                    onSecondary = { onEvent(GameEvent.OnRestart) },
+                )
+            }
         }
 
         AnimatedVisibility(
@@ -185,6 +213,7 @@ fun GameScreen(
                 title = stringResource(R.string.result_lost),
                 subtitle = stringResource(R.string.result_lost_desc),
                 stars = null,
+                detail = achievementLines(state).ifEmpty { null }?.joinToString("\n"),
                 primaryLabel = stringResource(R.string.result_retry),
                 onPrimary = { onEvent(GameEvent.OnRestart) },
                 secondaryLabel = stringResource(R.string.result_back),
@@ -207,7 +236,11 @@ private fun GameHud(state: GameState, onBack: () -> Unit) {
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (state.isDaily) stringResource(R.string.mode_daily) else stringResource(R.string.game_level, state.levelNumber),
+                    text = when {
+                        state.isDaily -> stringResource(R.string.mode_daily)
+                        state.isTutorial -> stringResource(R.string.tutorial_lesson, state.levelNumber, state.lessonCount)
+                        else -> stringResource(R.string.game_level, state.levelNumber)
+                    },
                     color = GameColors.TextPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp,
@@ -378,6 +411,32 @@ private fun GameActions(state: GameState, onEvent: (GameEvent) -> Unit) {
             onClick = { onEvent(GameEvent.OnRestart) },
             modifier = Modifier.weight(1f),
         )
+    }
+}
+
+@Composable
+private fun achievementLines(state: GameState): List<String> =
+    state.achievements.map { stringResource(R.string.result_achievement, stringResource(it.titleRes())) }
+
+/** The lesson's explanation, under the cube. */
+@Composable
+private fun LessonCard(topic: LessonTopic, number: Int, count: Int, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(GameColors.Card.copy(alpha = 0.95f))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.tutorial_lesson, number, count).uppercase(),
+            color = GameColors.ArrowRest,
+            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(stringResource(topic.titleRes()), color = GameColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text(stringResource(topic.bodyRes()), color = GameColors.TextSecondary, fontSize = 14.sp)
     }
 }
 

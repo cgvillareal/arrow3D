@@ -14,6 +14,8 @@ import com.arrow3d.domain.modes.LevelResult
 import com.arrow3d.domain.modes.LevelSpec
 import com.arrow3d.domain.modes.PlayMode
 import com.arrow3d.domain.modes.ScoreEntry
+import com.arrow3d.domain.modes.Tutorial
+import com.arrow3d.domain.progress.LevelSummary
 import com.arrow3d.game.audio.ISoundPlayer
 import com.arrow3d.game.audio.SoundEvent
 import com.arrow3d.game.data.IOnlineRanking
@@ -64,7 +66,11 @@ class GameViewModel(
     /** The result of the current attempt was already saved (so replays and retries are not counted twice). */
     private var resultSaved = false
     private var helpUsed = false
+    /** Taps on blocked arrows in this attempt, for the stats. */
+    private var mistakes = 0
     private var saveJob: Job? = null
+    /** Tutorial only: index of the lesson on screen. */
+    private var lessonIndex = 0
 
     /** Everything the player did since the level was loaded, replayed by the ranking server. */
     private val runLog = ArrayList<RunAction>()
@@ -75,7 +81,9 @@ class GameViewModel(
     init {
         viewModelScope.launch {
             progressRepository.observeSettings().collect { s ->
-                _state.update { it.copy(vibrationEnabled = s.vibration, soundEnabled = s.sound, colorBlind = s.colorBlind) }
+                _state.update {
+                    it.copy(vibrationEnabled = s.vibration, soundEnabled = s.sound, musicEnabled = s.music, colorBlind = s.colorBlind)
+                }
             }
         }
         viewModelScope.launch { loadCurrent() }
@@ -90,7 +98,12 @@ class GameViewModel(
             GameEvent.OnNextLevel -> viewModelScope.launch {
                 // Progress is saved when the level ends; read it back only once it is written.
                 saveJob?.join()
-                loadCurrent()
+                if (mode == PlayMode.Tutorial) {
+                    // Walk the lessons in order, also when the tutorial is being replayed.
+                    if (lessonIndex + 1 < Tutorial.size) loadLesson(lessonIndex + 1) else _sideEffects.tryEmit(GameSideEffect.NavigateBack)
+                } else {
+                    loadCurrent()
+                }
             }
             GameEvent.OnBack -> _sideEffects.tryEmit(GameSideEffect.NavigateBack)
         }
@@ -112,25 +125,40 @@ class GameViewModel(
                 loadedDay = today()
                 loadLevel(1, DailyChallenge.spec(loadedDay))
             }
+            PlayMode.Tutorial -> loadLesson(Tutorial.startIndex(progressRepository.observeTutorialProgress().first()))
         }
     }
 
     private suspend fun loadLevel(number: Int, spec: LevelSpec) {
         _state.update { it.copy(isLoading = true, levelNumber = number, gridSize = spec.gridSize, hintArrowId = null) }
         val generated = withContext(computeDispatcher) { LevelGenerator(spec.config).generate(spec.seed) }
-        val puzzle = PuzzleEngine.start(generated.level, spec.lives, spec.undos, spec.hints)
+        show(number, PuzzleEngine.start(generated.level, spec.lives, spec.undos, spec.hints))
+    }
+
+    /** Tutorial levels are hand-made, with no lives or limits. */
+    private fun loadLesson(index: Int) {
+        lessonIndex = index
+        val lesson = Tutorial.lessons[index]
+        _state.update {
+            it.copy(gridSize = lesson.level.surface.size, lesson = lesson.topic, lessonCount = Tutorial.size)
+        }
+        show(index + 1, PuzzleEngine.start(lesson.level, lives = null, undos = null, hints = null))
+    }
+
+    private fun show(number: Int, puzzle: PuzzleState) {
         startAttempt()
         runLog.clear()
         runStartedAt = clock()
         _state.update {
-            it.copy(isLoading = false, puzzle = puzzle, session = it.session + 1, hintArrowId = null)
+            it.copy(isLoading = false, levelNumber = number, puzzle = puzzle, session = it.session + 1, hintArrowId = null)
         }
     }
 
     private fun startAttempt() {
         resultSaved = false
         helpUsed = false
-        _state.update { it.copy(recordRank = null, lastPoints = 0, online = OnlineResult.None) }
+        mistakes = 0
+        _state.update { it.copy(recordRank = null, lastPoints = 0, online = OnlineResult.None, achievements = emptyList()) }
     }
 
     private fun onArrowTapped(arrowId: Int, ambiguous: Boolean) {
@@ -161,6 +189,7 @@ class GameViewModel(
                 if (outcome.levelComplete) onLevelComplete(result.state)
             }
             is TapOutcome.Blocked -> {
+                mistakes++
                 _state.update { it.copy(puzzle = result.state) }
                 emitFx(ArrowFx.Blocked(outcome.arrowId, outcome.blockerId))
                 vibrate(HapticEvent.Blocked)
@@ -187,6 +216,7 @@ class GameViewModel(
         val levelNumber = _state.value.levelNumber
         val day = if (mode == PlayMode.Daily) loadedDay else today()
         saveJob = viewModelScope.launch {
+            var dailyStreak = 0
             when (mode) {
                 is PlayMode.Classic -> progressRepository.setCurrentLevel(mode.difficulty, levelNumber + 1)
                 PlayMode.Adaptive -> saveAdaptive(levelNumber, LevelResult(won = true, livesLost = puzzle.livesLost, helpUsed = helpUsed))
@@ -194,13 +224,41 @@ class GameViewModel(
                     val record = progressRepository.observeDaily().first()
                     val updated = DailyChallenge.complete(record, day, puzzle.score)
                     progressRepository.setDaily(updated)
+                    dailyStreak = updated.streak
                     _state.update { it.copy(dailyStreak = updated.streak) }
                 }
+                PlayMode.Tutorial -> progressRepository.setTutorialProgress(lessonIndex + 1)
             }
-            val rank = progressRepository.addScore(mode.key, ScoreEntry(puzzle.score, puzzle.bestCombo, levelNumber, day))
-            _state.update { it.copy(recordRank = rank) }
+            if (mode != PlayMode.Tutorial) {
+                val rank = progressRepository.addScore(mode.key, ScoreEntry(puzzle.score, puzzle.bestCombo, levelNumber, day))
+                _state.update { it.copy(recordRank = rank) }
+            }
+            recordStats(puzzle, won = true, dailyStreak = dailyStreak)
         }
-        submitOnline(levelNumber, day)
+        if (mode != PlayMode.Tutorial) submitOnline(levelNumber, day)
+    }
+
+    /** Adds the attempt to the lifetime stats and shows what it unlocked. */
+    private suspend fun recordStats(puzzle: PuzzleState, won: Boolean, dailyStreak: Int = 0) {
+        val removed = puzzle.history.map(puzzle.level::arrow)
+        val summary = LevelSummary(
+            mode = mode,
+            won = won,
+            hasLives = puzzle.maxLives != null,
+            livesLost = puzzle.livesLost,
+            score = puzzle.score,
+            bestCombo = puzzle.bestCombo,
+            arrowsRemoved = removed.size,
+            bentRemoved = removed.count { it.isBent },
+            travelersRemoved = removed.count { it.kind == ArrowKind.TRAVELER },
+            mistakes = mistakes,
+            helpUsed = helpUsed,
+            dailyStreak = dailyStreak,
+            adaptiveRating = if (mode == PlayMode.Adaptive) progressRepository.observeAdaptive().first().rating else null,
+            finishedTutorial = mode == PlayMode.Tutorial && won && lessonIndex == Tutorial.size - 1,
+        )
+        val unlocked = progressRepository.recordLevel(summary)
+        if (unlocked.isNotEmpty()) _state.update { it.copy(achievements = unlocked) }
     }
 
     private fun submitOnline(levelNumber: Int, day: Long) {
@@ -228,11 +286,14 @@ class GameViewModel(
     }
 
     private fun onLevelLost(puzzle: PuzzleState) {
-        if (resultSaved || mode != PlayMode.Adaptive) return
+        if (resultSaved) return
         resultSaved = true
         val levelNumber = _state.value.levelNumber
         saveJob = viewModelScope.launch {
-            saveAdaptive(levelNumber, LevelResult(won = false, livesLost = puzzle.livesLost, helpUsed = helpUsed))
+            if (mode == PlayMode.Adaptive) {
+                saveAdaptive(levelNumber, LevelResult(won = false, livesLost = puzzle.livesLost, helpUsed = helpUsed))
+            }
+            recordStats(puzzle, won = false)
         }
     }
 

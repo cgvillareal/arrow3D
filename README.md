@@ -52,7 +52,9 @@ ver [server/README.md](server/README.md).
 | Giro de 360° al terminar y pantalla de resultado con estrellas | ✅ |
 | Progreso por modo y ajuste de vibración guardados (DataStore) | ✅ |
 | Ranking mundial | ✅ servidor propio en `server/` (Ktor + SQLite + Docker); verifica cada partida volviéndola a jugar. Ver [server/README.md](server/README.md) |
-| Música | ⏳ |
+| Tutorial | ✅ siete lecciones hechas a mano (tocar, bloqueos, cadenas, largas, dobladas, viajeras, combos), solo en las caras que se ven al empezar |
+| Música | ✅ generativa, sintetizada en tiempo real; el arpegio y los destellos entran con el combo y se calman cuando vence |
+| Logros y estadísticas | ✅ 14 logros calculados a partir de las estadísticas acumuladas; se avisan en la tarjeta de resultado |
 
 ## Arquitectura
 
@@ -64,7 +66,8 @@ ver [server/README.md](server/README.md).
   solver/      Solver voraz: sacar una flecha nunca bloquea a otra, así que alcanza
   generator/   LevelGenerator: arma el cubo lleno en orden inverso; Difficulty con los presets
   engine/      PuzzleEngine: tap, vidas, combos y puntos, deshacer, pista, reiniciar (funciones puras)
-  modes/       PlayMode, LevelSpec, AdaptiveDifficulty, DailyChallenge (racha), Leaderboard (top 10)
+  modes/       PlayMode, LevelSpec, AdaptiveDifficulty, DailyChallenge (racha), Leaderboard (top 10), Tutorial
+  progress/    PlayerStats, StatsRules y Achievement (cada logro es una condición sobre las estadísticas)
 
 :core:online   Kotlin puro. Protocolo del ranking, RunVerifier (vuelve a jugar una partida) y RankingClient (HTTP)
 
@@ -76,7 +79,8 @@ server/        Build aparte: servidor del ranking (Ktor + SQLite), usa :core:dom
   presentation/game/       GameViewModel, GameState/Event/SideEffect, GameScreenRoot + GameScreen
   presentation/select/     Selección de modo, desafío diario y ajustes
   presentation/records/    Récords por modo
-  audio/       ToneSynth (síntesis + WAV, Kotlin puro) y AndroidSoundPlayer (SoundPool)
+  audio/       ToneSynth y MusicGenerator (Kotlin puro) + AndroidSoundPlayer (SoundPool) y AndroidMusicPlayer (AudioTrack)
+  presentation/achievements/  Logros y estadísticas
   data/        IProgressRepository + ProgressRepositoryImpl (DataStore): niveles, ajustes, adaptativo, diario, récords
                IOnlineRanking + OnlineRankingImpl: cuenta anónima, envío de partidas y cola sin conexión
   haptics/     IHaptics + AndroidHaptics (VibrationEffect, Composition en API 30+)
@@ -101,6 +105,8 @@ Decisiones:
 - `AdaptiveDifficulty`: cuánto sube o baja la nota por victoria limpia, con ayuda, con vidas perdidas o derrota.
 - `DailyChallenge`: qué dificultad toca cada día de la semana.
 - `SoundBank`: notas, duraciones y timbres de cada sonido.
+- `MusicGenerator`: tempo, progresión, volumen de cada capa y desde qué intensidad entra cada una.
+- `Achievement`: umbrales de cada logro.
 - `ArrowFxState`: duraciones de salida (250 a 400 ms), rebote y halo.
 - `CubeCameraState`: sensibilidad de giro, fricción de la inercia, límites de zoom.
 - `HitTest`: radio de toque y umbral de ambigüedad.

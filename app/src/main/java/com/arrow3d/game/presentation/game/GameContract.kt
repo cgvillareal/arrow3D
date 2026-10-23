@@ -3,7 +3,9 @@ package com.arrow3d.game.presentation.game
 import androidx.compose.runtime.Immutable
 import com.arrow3d.domain.engine.PuzzleState
 import com.arrow3d.domain.engine.PuzzleStatus
+import com.arrow3d.domain.modes.LessonTopic
 import com.arrow3d.domain.modes.PlayMode
+import com.arrow3d.domain.progress.Achievement
 
 @Immutable
 data class GameState(
@@ -17,6 +19,7 @@ data class GameState(
     val hintArrowId: Int? = null,
     val vibrationEnabled: Boolean = true,
     val soundEnabled: Boolean = true,
+    val musicEnabled: Boolean = true,
     val colorBlind: Boolean = false,
     /** Points the last release scored, shown next to the combo. */
     val lastPoints: Int = 0,
@@ -25,8 +28,15 @@ data class GameState(
     /** Daily challenge streak after this win. */
     val dailyStreak: Int = 0,
     val online: OnlineResult = OnlineResult.None,
+    /** Tutorial only: what the current lesson teaches, and how many lessons there are. */
+    val lesson: LessonTopic? = null,
+    val lessonCount: Int = 0,
+    /** Achievements unlocked by the attempt that just ended. */
+    val achievements: List<Achievement> = emptyList(),
 ) {
     val isDaily: Boolean get() = mode == PlayMode.Daily
+    val isTutorial: Boolean get() = mode == PlayMode.Tutorial
+    val isLastLesson: Boolean get() = isTutorial && levelNumber >= lessonCount
 
     val status: PuzzleStatus get() = puzzle?.status ?: PuzzleStatus.PLAYING
     val lives: Int? get() = puzzle?.lives

@@ -43,9 +43,16 @@ sealed interface PlayMode {
         override val key: String = "daily"
     }
 
+    /** Hand-made lessons for new players. No lives, no records, no ranking. */
+    data object Tutorial : PlayMode {
+        override val key: String = "tutorial"
+    }
+
     companion object {
+        /** Modes that keep records and have an online board (every mode but the tutorial). */
         val all: List<PlayMode> = Difficulty.entries.map { Classic(it) } + Adaptive + Daily
 
-        fun fromKey(key: String): PlayMode = all.firstOrNull { it.key == key } ?: Classic(Difficulty.EASY)
+        fun fromKey(key: String): PlayMode =
+            if (key == Tutorial.key) Tutorial else all.firstOrNull { it.key == key } ?: Classic(Difficulty.EASY)
     }
 }

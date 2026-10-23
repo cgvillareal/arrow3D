@@ -17,6 +17,10 @@ import com.arrow3d.domain.modes.DailyRecord
 import com.arrow3d.domain.modes.Leaderboard
 import com.arrow3d.domain.modes.PlayMode
 import com.arrow3d.domain.modes.ScoreEntry
+import com.arrow3d.domain.progress.Achievement
+import com.arrow3d.domain.progress.LevelSummary
+import com.arrow3d.domain.progress.PlayerStats
+import com.arrow3d.domain.progress.StatsRules
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -24,6 +28,7 @@ import kotlinx.coroutines.flow.map
 data class Settings(
     val vibration: Boolean = true,
     val sound: Boolean = true,
+    val music: Boolean = true,
     val colorBlind: Boolean = false,
 )
 
@@ -37,7 +42,17 @@ interface IProgressRepository {
     fun observeSettings(): Flow<Settings>
     suspend fun setVibrationEnabled(enabled: Boolean)
     suspend fun setSoundEnabled(enabled: Boolean)
+    suspend fun setMusicEnabled(enabled: Boolean)
     suspend fun setColorBlindEnabled(enabled: Boolean)
+
+    /** Number of tutorial lessons completed (lessons are played in order). */
+    fun observeTutorialProgress(): Flow<Int>
+    suspend fun setTutorialProgress(completed: Int)
+
+    fun observeStats(): Flow<PlayerStats>
+
+    /** Adds one finished attempt to the stats; returns the achievements it unlocked. */
+    suspend fun recordLevel(summary: LevelSummary): List<Achievement>
 
     fun observeAdaptive(): Flow<AdaptiveProgress>
     suspend fun setAdaptive(progress: AdaptiveProgress)
@@ -62,6 +77,9 @@ class ProgressRepositoryImpl(context: Context) : IProgressRepository {
     private fun recordsKey(modeKey: String) = stringPreferencesKey("records_$modeKey")
     private val vibrationKey = booleanPreferencesKey("vibration_enabled")
     private val soundKey = booleanPreferencesKey("sound_enabled")
+    private val musicKey = booleanPreferencesKey("music_enabled")
+    private val tutorialKey = intPreferencesKey("tutorial_completed")
+    private val statsKey = stringPreferencesKey("player_stats")
     private val colorBlindKey = booleanPreferencesKey("color_blind_enabled")
     private val adaptiveLevelKey = intPreferencesKey("adaptive_level")
     private val adaptiveRatingKey = doublePreferencesKey("adaptive_rating")
@@ -85,6 +103,7 @@ class ProgressRepositoryImpl(context: Context) : IProgressRepository {
         Settings(
             vibration = it[vibrationKey] ?: true,
             sound = it[soundKey] ?: true,
+            music = it[musicKey] ?: true,
             colorBlind = it[colorBlindKey] ?: false,
         )
     }
@@ -97,8 +116,31 @@ class ProgressRepositoryImpl(context: Context) : IProgressRepository {
         store.edit { it[soundKey] = enabled }
     }
 
+    override suspend fun setMusicEnabled(enabled: Boolean) {
+        store.edit { it[musicKey] = enabled }
+    }
+
     override suspend fun setColorBlindEnabled(enabled: Boolean) {
         store.edit { it[colorBlindKey] = enabled }
+    }
+
+    override fun observeTutorialProgress(): Flow<Int> = store.data.map { it[tutorialKey] ?: 0 }
+
+    override suspend fun setTutorialProgress(completed: Int) {
+        store.edit { it[tutorialKey] = maxOf(it[tutorialKey] ?: 0, completed) }
+    }
+
+    override fun observeStats(): Flow<PlayerStats> = store.data.map { PlayerStats.decode(it[statsKey]) }
+
+    override suspend fun recordLevel(summary: LevelSummary): List<Achievement> {
+        var unlocked = emptyList<Achievement>()
+        store.edit { prefs ->
+            val before = PlayerStats.decode(prefs[statsKey])
+            val after = StatsRules.apply(before, summary)
+            prefs[statsKey] = after.encode()
+            unlocked = Achievement.newlyUnlocked(before, after)
+        }
+        return unlocked
     }
 
     override fun observeAdaptive(): Flow<AdaptiveProgress> = store.data.map {

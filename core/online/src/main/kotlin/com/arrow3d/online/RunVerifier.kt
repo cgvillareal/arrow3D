@@ -38,7 +38,7 @@ object RunVerifier {
     fun specFor(run: RunSubmission, serverDay: Long): Result<LevelSpec> {
         if (run.level !in 1..MAX_LEVEL) return Result.failure(IllegalArgumentException("level out of range"))
         return when (val mode = PlayMode.all.firstOrNull { it.key == run.mode }) {
-            null -> Result.failure(IllegalArgumentException("unknown mode ${run.mode}"))
+            null, PlayMode.Tutorial -> Result.failure(IllegalArgumentException("unknown mode ${run.mode}"))
             is PlayMode.Classic -> Result.success(LevelSpec.classic(mode.difficulty, run.level))
             PlayMode.Adaptive -> {
                 val rating = run.rating

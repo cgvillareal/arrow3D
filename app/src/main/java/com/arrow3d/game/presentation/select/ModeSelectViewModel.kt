@@ -7,6 +7,7 @@ import com.arrow3d.domain.generator.Difficulty
 import com.arrow3d.domain.modes.AdaptiveProgress
 import com.arrow3d.domain.modes.DailyRecord
 import com.arrow3d.domain.modes.PlayMode
+import com.arrow3d.domain.modes.Tutorial
 import com.arrow3d.game.data.IProgressRepository
 import com.arrow3d.game.data.Settings
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -29,7 +30,11 @@ data class ModeSelectState(
     val today: Long = 0,
     /** Best score per [PlayMode.key]; missing when the mode has no record yet. */
     val bestScores: Map<String, Int> = emptyMap(),
+    /** Tutorial lessons completed. */
+    val tutorialCompleted: Int = 0,
 ) {
+    val tutorialDone: Boolean get() = tutorialCompleted >= Tutorial.size
+
     val dailyDoneToday: Boolean get() = daily.completedOn(today)
     val dailyStreak: Int get() = daily.currentStreak(today)
 }
@@ -37,6 +42,8 @@ data class ModeSelectState(
 sealed interface ModeSelectEvent {
     data class OnModeSelected(val mode: PlayMode) : ModeSelectEvent
     data object OnRecordsSelected : ModeSelectEvent
+    data object OnAchievementsSelected : ModeSelectEvent
+    data class OnMusicToggled(val enabled: Boolean) : ModeSelectEvent
     data class OnVibrationToggled(val enabled: Boolean) : ModeSelectEvent
     data class OnSoundToggled(val enabled: Boolean) : ModeSelectEvent
     data class OnColorBlindToggled(val enabled: Boolean) : ModeSelectEvent
@@ -45,6 +52,7 @@ sealed interface ModeSelectEvent {
 sealed interface ModeSelectSideEffect {
     data class OpenGame(val mode: PlayMode) : ModeSelectSideEffect
     data object OpenRecords : ModeSelectSideEffect
+    data object OpenAchievements : ModeSelectSideEffect
 }
 
 class ModeSelectViewModel(
@@ -76,7 +84,10 @@ class ModeSelectViewModel(
                     today = today(),
                     bestScores = boards.mapNotNull { (key, board) -> board.best?.let { key to it.score } }.toMap(),
                 )
-            }.collect { s -> _state.update { s } }
+            }.collect { s -> _state.update { s.copy(tutorialCompleted = it.tutorialCompleted) } }
+        }
+        viewModelScope.launch {
+            progressRepository.observeTutorialProgress().collect { n -> _state.update { it.copy(tutorialCompleted = n) } }
         }
     }
 
@@ -84,6 +95,8 @@ class ModeSelectViewModel(
         when (event) {
             is ModeSelectEvent.OnModeSelected -> _sideEffects.tryEmit(ModeSelectSideEffect.OpenGame(event.mode))
             ModeSelectEvent.OnRecordsSelected -> _sideEffects.tryEmit(ModeSelectSideEffect.OpenRecords)
+            ModeSelectEvent.OnAchievementsSelected -> _sideEffects.tryEmit(ModeSelectSideEffect.OpenAchievements)
+            is ModeSelectEvent.OnMusicToggled -> viewModelScope.launch { progressRepository.setMusicEnabled(event.enabled) }
             is ModeSelectEvent.OnVibrationToggled -> viewModelScope.launch { progressRepository.setVibrationEnabled(event.enabled) }
             is ModeSelectEvent.OnSoundToggled -> viewModelScope.launch { progressRepository.setSoundEnabled(event.enabled) }
             is ModeSelectEvent.OnColorBlindToggled -> viewModelScope.launch { progressRepository.setColorBlindEnabled(event.enabled) }

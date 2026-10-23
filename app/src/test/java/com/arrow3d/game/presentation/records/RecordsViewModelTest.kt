@@ -6,6 +6,9 @@ import com.arrow3d.domain.modes.DailyRecord
 import com.arrow3d.domain.modes.Leaderboard
 import com.arrow3d.domain.modes.PlayMode
 import com.arrow3d.domain.modes.ScoreEntry
+import com.arrow3d.domain.progress.Achievement
+import com.arrow3d.domain.progress.LevelSummary
+import com.arrow3d.domain.progress.PlayerStats
 import com.arrow3d.game.data.IOnlineRanking
 import com.arrow3d.game.data.IProgressRepository
 import com.arrow3d.game.data.OnlineAccount
@@ -41,7 +44,12 @@ private class LocalOnly(private val boards: Map<String, Leaderboard>) : IProgres
     override fun observeSettings(): Flow<Settings> = flowOf(Settings())
     override suspend fun setVibrationEnabled(enabled: Boolean) = Unit
     override suspend fun setSoundEnabled(enabled: Boolean) = Unit
+    override suspend fun setMusicEnabled(enabled: Boolean) = Unit
     override suspend fun setColorBlindEnabled(enabled: Boolean) = Unit
+    override fun observeTutorialProgress(): Flow<Int> = flowOf(0)
+    override suspend fun setTutorialProgress(completed: Int) = Unit
+    override fun observeStats(): Flow<PlayerStats> = flowOf(PlayerStats())
+    override suspend fun recordLevel(summary: LevelSummary): List<Achievement> = emptyList()
     override fun observeAdaptive(): Flow<AdaptiveProgress> = flowOf(AdaptiveProgress())
     override suspend fun setAdaptive(progress: AdaptiveProgress) = Unit
     override fun observeDaily(): Flow<DailyRecord> = flowOf(DailyRecord())

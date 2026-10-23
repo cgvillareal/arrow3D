@@ -10,7 +10,13 @@ import com.arrow3d.domain.modes.DailyChallenge
 import com.arrow3d.domain.modes.DailyRecord
 import com.arrow3d.domain.modes.Leaderboard
 import com.arrow3d.domain.modes.PlayMode
+import com.arrow3d.domain.modes.LessonTopic
 import com.arrow3d.domain.modes.ScoreEntry
+import com.arrow3d.domain.modes.Tutorial
+import com.arrow3d.domain.progress.Achievement
+import com.arrow3d.domain.progress.LevelSummary
+import com.arrow3d.domain.progress.PlayerStats
+import com.arrow3d.domain.progress.StatsRules
 import com.arrow3d.domain.solver.Solver
 import com.arrow3d.game.audio.ISoundPlayer
 import com.arrow3d.game.audio.SoundEvent
@@ -60,7 +66,22 @@ private class FakeProgressRepository(startLevel: Int = 1) : IProgressRepository 
     override fun observeSettings(): Flow<Settings> = settings
     override suspend fun setVibrationEnabled(enabled: Boolean) = settings.update { it.copy(vibration = enabled) }
     override suspend fun setSoundEnabled(enabled: Boolean) = settings.update { it.copy(sound = enabled) }
+    override suspend fun setMusicEnabled(enabled: Boolean) = settings.update { it.copy(music = enabled) }
     override suspend fun setColorBlindEnabled(enabled: Boolean) = settings.update { it.copy(colorBlind = enabled) }
+    val tutorial = MutableStateFlow(0)
+    override fun observeTutorialProgress(): Flow<Int> = tutorial
+    override suspend fun setTutorialProgress(completed: Int) {
+        tutorial.value = maxOf(tutorial.value, completed)
+    }
+    val stats = MutableStateFlow(PlayerStats())
+    val summaries = mutableListOf<LevelSummary>()
+    override fun observeStats(): Flow<PlayerStats> = stats
+    override suspend fun recordLevel(summary: LevelSummary): List<Achievement> {
+        summaries += summary
+        val before = stats.value
+        stats.value = StatsRules.apply(before, summary)
+        return Achievement.newlyUnlocked(before, stats.value)
+    }
     override fun observeAdaptive(): Flow<AdaptiveProgress> = adaptive
     override suspend fun setAdaptive(progress: AdaptiveProgress) {
         adaptive.value = progress
@@ -392,6 +413,73 @@ class GameViewModelTest {
         advanceUntilIdle()
         assertTrue(online.submitted.isEmpty())
         assertEquals(OnlineResult.None, vm.state.value.online)
+    }
+
+    @Test
+    fun `the tutorial walks the lessons in order and is saved`() = runTest(dispatcher) {
+        val vm = viewModel(PlayMode.Tutorial)
+        advanceUntilIdle()
+        assertEquals(LessonTopic.TAP, vm.state.value.lesson)
+        assertEquals(Tutorial.size, vm.state.value.lessonCount)
+        assertEquals(null, vm.state.value.lives)
+        Tutorial.lessons.forEachIndexed { index, lesson ->
+            assertEquals(lesson.topic, vm.state.value.lesson)
+            solve(vm)
+            advanceUntilIdle()
+            assertEquals(index + 1, repository.tutorial.value)
+            if (index < Tutorial.size - 1) {
+                assertFalse(vm.state.value.isLastLesson)
+                vm.onEvent(GameEvent.OnNextLevel)
+                advanceUntilIdle()
+            }
+        }
+        assertTrue(vm.state.value.isLastLesson)
+        assertEquals(listOf(Achievement.TUTORIAL), vm.state.value.achievements)
+        // no records, no ranking for lessons
+        assertTrue(repository.boards.value.isEmpty())
+        assertTrue(online.submitted.isEmpty())
+        vm.sideEffects.test {
+            vm.onEvent(GameEvent.OnNextLevel)
+            assertEquals(GameSideEffect.NavigateBack, awaitItem())
+        }
+    }
+
+    @Test
+    fun `a finished tutorial starts over from the first lesson`() = runTest(dispatcher) {
+        repository.tutorial.value = Tutorial.size
+        val vm = viewModel(PlayMode.Tutorial)
+        advanceUntilIdle()
+        assertEquals(LessonTopic.TAP, vm.state.value.lesson)
+        assertEquals(1, vm.state.value.levelNumber)
+    }
+
+    @Test
+    fun `wins and losses go into the stats and show new achievements`() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+        val puzzle = vm.state.value.puzzle!!
+        val blocked = puzzle.remaining.first { !puzzle.level.isFree(it, puzzle.remaining) }
+        vm.onEvent(GameEvent.OnArrowTapped(blocked, ambiguous = false))
+        solve(vm)
+        advanceUntilIdle()
+        val win = repository.summaries.single()
+        assertTrue(win.won)
+        assertEquals(1, win.mistakes)
+        assertEquals(1, win.livesLost)
+        assertEquals(puzzle.level.arrows.size, win.arrowsRemoved)
+        assertEquals(puzzle.level.arrows.count { it.isBent }, win.bentRemoved)
+        assertTrue(Achievement.FIRST_WIN in vm.state.value.achievements)
+
+        // next level: lose it
+        vm.onEvent(GameEvent.OnNextLevel)
+        advanceUntilIdle()
+        assertTrue(vm.state.value.achievements.isEmpty())
+        val next = vm.state.value.puzzle!!
+        val stuck = next.remaining.first { !next.level.isFree(it, next.remaining) }
+        repeat(next.lives!!) { vm.onEvent(GameEvent.OnArrowTapped(stuck, ambiguous = false)) }
+        advanceUntilIdle()
+        assertEquals(1, repository.stats.value.levelsLost)
+        assertEquals(1, repository.stats.value.levelsWon)
     }
 
     private companion object {

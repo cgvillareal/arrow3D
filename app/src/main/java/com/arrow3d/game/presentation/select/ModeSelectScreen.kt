@@ -39,6 +39,7 @@ import com.arrow3d.domain.generator.Difficulty
 import com.arrow3d.domain.modes.AdaptiveDifficulty
 import com.arrow3d.domain.modes.DailyChallenge
 import com.arrow3d.domain.modes.PlayMode
+import com.arrow3d.domain.modes.Tutorial
 import com.arrow3d.game.R
 import com.arrow3d.game.presentation.model.accent
 import com.arrow3d.game.presentation.model.descriptionRes
@@ -51,16 +52,19 @@ import org.koin.androidx.compose.koinViewModel
 fun ModeSelectScreenRoot(
     onOpenGame: (PlayMode) -> Unit,
     onOpenRecords: () -> Unit,
+    onOpenAchievements: () -> Unit,
     viewModel: ModeSelectViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val currentOnOpenGame by rememberUpdatedState(onOpenGame)
     val currentOnOpenRecords by rememberUpdatedState(onOpenRecords)
+    val currentOnOpenAchievements by rememberUpdatedState(onOpenAchievements)
     LaunchedEffect(viewModel) {
         viewModel.sideEffects.collect { effect ->
             when (effect) {
                 is ModeSelectSideEffect.OpenGame -> currentOnOpenGame(effect.mode)
                 ModeSelectSideEffect.OpenRecords -> currentOnOpenRecords()
+                ModeSelectSideEffect.OpenAchievements -> currentOnOpenAchievements()
             }
         }
     }
@@ -99,6 +103,8 @@ fun ModeSelectScreen(state: ModeSelectState, onEvent: (ModeSelectEvent) -> Unit)
         Spacer(Modifier.height(20.dp))
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // New players see the tutorial first; once done it moves to the end of the list.
+            if (!state.tutorialDone) TutorialCard(state, onEvent)
             val dailyDifficulty = DailyChallenge.difficultyFor(state.today)
             val dailyDesc = stringResource(
                 R.string.select_daily_desc,
@@ -140,26 +146,13 @@ fun ModeSelectScreen(state: ModeSelectState, onEvent: (ModeSelectEvent) -> Unit)
                 enabled = true,
                 onClick = { onEvent(ModeSelectEvent.OnModeSelected(PlayMode.Adaptive)) },
             )
+            if (state.tutorialDone) TutorialCard(state, onEvent)
         }
 
         Spacer(Modifier.height(16.dp))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(GameColors.Card)
-                .clickable { onEvent(ModeSelectEvent.OnRecordsSelected) }
-                .padding(horizontal = 16.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.select_records),
-                color = GameColors.TextPrimary,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
-            Text(text = "›", color = GameColors.TextSecondary, fontSize = 22.sp)
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            LinkRow(stringResource(R.string.select_records)) { onEvent(ModeSelectEvent.OnRecordsSelected) }
+            LinkRow(stringResource(R.string.select_achievements)) { onEvent(ModeSelectEvent.OnAchievementsSelected) }
         }
 
         Spacer(Modifier.height(24.dp))
@@ -188,12 +181,52 @@ fun ModeSelectScreen(state: ModeSelectState, onEvent: (ModeSelectEvent) -> Unit)
                 onChange = { onEvent(ModeSelectEvent.OnSoundToggled(it)) },
             )
             SettingRow(
+                label = stringResource(R.string.select_music),
+                checked = state.settings.music,
+                onChange = { onEvent(ModeSelectEvent.OnMusicToggled(it)) },
+            )
+            SettingRow(
                 label = stringResource(R.string.select_color_blind),
                 description = stringResource(R.string.select_color_blind_desc),
                 checked = state.settings.colorBlind,
                 onChange = { onEvent(ModeSelectEvent.OnColorBlindToggled(it)) },
             )
         }
+    }
+}
+
+@Composable
+private fun TutorialCard(state: ModeSelectState, onEvent: (ModeSelectEvent) -> Unit) {
+    val description = when {
+        state.tutorialDone -> stringResource(R.string.select_tutorial_again)
+        state.tutorialCompleted > 0 -> stringResource(R.string.select_tutorial_continue, state.tutorialCompleted + 1)
+        else -> stringResource(R.string.select_tutorial_first)
+    }
+    ModeCard(
+        name = stringResource(R.string.mode_tutorial),
+        description = description,
+        trailing = stringResource(R.string.tutorial_lesson, minOf(state.tutorialCompleted, Tutorial.size), Tutorial.size)
+            .takeIf { !state.tutorialDone && state.tutorialCompleted > 0 }.orEmpty(),
+        accent = PlayMode.Tutorial.accent(),
+        enabled = true,
+        onClick = { onEvent(ModeSelectEvent.OnModeSelected(PlayMode.Tutorial)) },
+    )
+}
+
+@Composable
+private fun LinkRow(label: String, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(GameColors.Card)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp),
+    ) {
+        Text(text = label, color = GameColors.TextPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Text(text = "›", color = GameColors.TextSecondary, fontSize = 22.sp)
     }
 }
 

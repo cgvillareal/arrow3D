@@ -38,10 +38,12 @@ fun PlayMode.nameRes(): Int = when (this) {
     is PlayMode.Classic -> difficulty.nameRes()
     PlayMode.Adaptive -> R.string.mode_adaptive
     PlayMode.Daily -> R.string.mode_daily
+    PlayMode.Tutorial -> R.string.mode_tutorial
 }
 
 fun PlayMode.accent(): Color = when (this) {
     is PlayMode.Classic -> difficulty.accent()
     PlayMode.Adaptive -> GameColors.Adaptive
     PlayMode.Daily -> GameColors.Star
+    PlayMode.Tutorial -> GameColors.ArrowRest
 }
