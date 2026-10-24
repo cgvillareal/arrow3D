@@ -1,9 +1,14 @@
 package com.arrow3d.game.presentation.game
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +23,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -32,9 +38,15 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -42,19 +54,26 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.arrow3d.domain.engine.ComboRules
 import com.arrow3d.domain.engine.PuzzleEngine
 import com.arrow3d.domain.engine.PuzzleStatus
 import com.arrow3d.domain.generator.Difficulty
 import com.arrow3d.domain.generator.GeneratorConfig
 import com.arrow3d.domain.generator.LevelGenerator
+import com.arrow3d.domain.modes.LessonTopic
+import com.arrow3d.domain.modes.PlayMode
 import com.arrow3d.game.R
 import com.arrow3d.game.presentation.game.cube.ArrowFxState
 import com.arrow3d.game.presentation.game.cube.CubeCameraState
 import com.arrow3d.game.presentation.game.cube.CubeView
 import com.arrow3d.game.presentation.game.cube.rememberCubeCameraState
+import com.arrow3d.game.presentation.model.bodyRes
 import com.arrow3d.game.presentation.model.nameRes
+import com.arrow3d.game.presentation.model.titleRes
 import com.arrow3d.game.ui.theme.Arrow3dTheme
+import com.arrow3d.game.ui.theme.ArrowPalette
 import com.arrow3d.game.ui.theme.GameColors
+import kotlinx.coroutines.launch
 
 @Composable
 fun GameScreen(
@@ -98,15 +117,36 @@ fun GameScreen(
                         enabled = state.status == PuzzleStatus.PLAYING,
                         onArrowTap = { hit -> onEvent(GameEvent.OnArrowTapped(hit.arrowId, hit.ambiguous)) },
                         modifier = Modifier.fillMaxSize(),
+                        palette = ArrowPalette.of(state.colorBlind),
                     )
-                    Text(
-                        text = stringResource(R.string.game_rotate_hint),
-                        color = GameColors.TextSecondary,
-                        fontSize = 12.sp,
+                    ComboBadge(
+                        combo = state.combo,
+                        points = state.lastPoints,
+                        startedAt = state.comboStartedAt,
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 8.dp),
+                            .align(Alignment.TopCenter)
+                            .padding(top = 8.dp),
                     )
+                    val lesson = state.lesson
+                    if (lesson != null) {
+                        LessonCard(
+                            topic = lesson,
+                            number = state.levelNumber,
+                            count = state.lessonCount,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.game_rotate_hint),
+                            color = GameColors.TextSecondary,
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 8.dp),
+                        )
+                    }
                 }
             }
 
@@ -119,19 +159,48 @@ fun GameScreen(
             exit = fadeOut(tween(150)),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
-            ResultCard(
-                title = stringResource(R.string.result_complete),
-                subtitle = if (state.livesLost == 0) {
+            if (state.isTutorial) {
+                ResultCard(
+                    title = stringResource(if (state.isLastLesson) R.string.tutorial_complete else R.string.tutorial_well_done),
+                    subtitle = stringResource(if (state.isLastLesson) R.string.tutorial_complete_desc else R.string.tutorial_well_done_desc),
+                    stars = null,
+                    detail = achievementLines(state).ifEmpty { null }?.joinToString("\n"),
+                    primaryLabel = stringResource(if (state.isLastLesson) R.string.tutorial_finish else R.string.tutorial_next),
+                    onPrimary = { onEvent(GameEvent.OnNextLevel) },
+                    secondaryLabel = stringResource(R.string.result_replay),
+                    onSecondary = { onEvent(GameEvent.OnRestart) },
+                )
+            } else {
+                val lives = if (state.livesLost == 0) {
                     stringResource(R.string.result_no_lives_lost)
                 } else {
                     stringResource(R.string.result_lives_lost, state.livesLost)
-                },
-                stars = state.stars,
-                primaryLabel = stringResource(R.string.result_next),
-                onPrimary = { onEvent(GameEvent.OnNextLevel) },
-                secondaryLabel = stringResource(R.string.result_replay),
-                onSecondary = { onEvent(GameEvent.OnRestart) },
-            )
+                }
+                val record = when (val rank = state.recordRank) {
+                    null -> null
+                    1 -> stringResource(R.string.result_new_record)
+                    else -> stringResource(R.string.result_rank, rank)
+                }
+                ResultCard(
+                    title = stringResource(if (state.isDaily) R.string.result_daily_complete else R.string.result_complete),
+                    subtitle = if (state.isDaily && state.dailyStreak > 0) {
+                        stringResource(R.string.result_daily_streak, state.dailyStreak, lives)
+                    } else {
+                        lives
+                    },
+                    stars = state.stars,
+                    detail = listOfNotNull(
+                        stringResource(R.string.result_score, state.score, state.bestCombo),
+                        record,
+                        onlineLine(state.online),
+                    ).plus(achievementLines(state)).joinToString("\n"),
+                    // The daily challenge has no next level: it is one puzzle a day.
+                    primaryLabel = stringResource(if (state.isDaily) R.string.result_back else R.string.result_next),
+                    onPrimary = { onEvent(if (state.isDaily) GameEvent.OnBack else GameEvent.OnNextLevel) },
+                    secondaryLabel = stringResource(R.string.result_replay),
+                    onSecondary = { onEvent(GameEvent.OnRestart) },
+                )
+            }
         }
 
         AnimatedVisibility(
@@ -144,6 +213,7 @@ fun GameScreen(
                 title = stringResource(R.string.result_lost),
                 subtitle = stringResource(R.string.result_lost_desc),
                 stars = null,
+                detail = achievementLines(state).ifEmpty { null }?.joinToString("\n"),
                 primaryLabel = stringResource(R.string.result_retry),
                 onPrimary = { onEvent(GameEvent.OnRestart) },
                 secondaryLabel = stringResource(R.string.result_back),
@@ -166,7 +236,11 @@ private fun GameHud(state: GameState, onBack: () -> Unit) {
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(R.string.game_level, state.levelNumber),
+                    text = when {
+                        state.isDaily -> stringResource(R.string.mode_daily)
+                        state.isTutorial -> stringResource(R.string.tutorial_lesson, state.levelNumber, state.lessonCount)
+                        else -> stringResource(R.string.game_level, state.levelNumber)
+                    },
                     color = GameColors.TextPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp,
@@ -174,8 +248,8 @@ private fun GameHud(state: GameState, onBack: () -> Unit) {
                 Text(
                     text = stringResource(
                         R.string.game_subtitle,
-                        state.difficulty.gridSize,
-                        stringResource(state.difficulty.nameRes()),
+                        state.gridSize,
+                        stringResource(state.mode.nameRes()),
                     ),
                     color = GameColors.TextSecondary,
                     fontSize = 13.sp,
@@ -195,15 +269,100 @@ private fun GameHud(state: GameState, onBack: () -> Unit) {
                 .fillMaxWidth()
                 .height(8.dp),
         )
-        Text(
-            text = stringResource(R.string.game_progress, state.removed, state.total),
-            color = GameColors.TextSecondary,
-            fontSize = 12.sp,
-            textAlign = TextAlign.End,
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 4.dp),
-        )
+        ) {
+            Text(
+                text = stringResource(R.string.game_score, state.score),
+                color = GameColors.TextPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = stringResource(R.string.game_progress, state.removed, state.total),
+                color = GameColors.TextSecondary,
+                fontSize = 12.sp,
+                textAlign = TextAlign.End,
+            )
+        }
+    }
+}
+
+/**
+ * Shows the running combo from x2 on. The bar under it drains over the combo window: releasing
+ * another arrow before it empties keeps the combo going. A blocked tap or an undo hides it.
+ */
+@Composable
+private fun ComboBadge(combo: Int, points: Int, startedAt: Long?, modifier: Modifier = Modifier) {
+    val timeLeft = remember { Animatable(0f) }
+    val pop = remember { Animatable(1f) }
+    // Keep the last values while the badge fades out after the combo ends.
+    var shownCombo by remember { mutableIntStateOf(0) }
+    var shownPoints by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(startedAt, combo) {
+        if (startedAt == null || combo < 2) {
+            timeLeft.snapTo(0f)
+            return@LaunchedEffect
+        }
+        shownCombo = combo
+        shownPoints = points
+        launch {
+            pop.snapTo(1.35f)
+            pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+        }
+        timeLeft.snapTo(1f)
+        timeLeft.animateTo(0f, tween(ComboRules.WINDOW_MS.toInt(), easing = LinearEasing))
+    }
+
+    AnimatedVisibility(
+        visible = combo >= 2 && timeLeft.value > 0f,
+        enter = fadeIn(tween(120)) + scaleIn(tween(120), initialScale = 0.7f),
+        exit = fadeOut(tween(220)),
+        modifier = modifier,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .graphicsLayer {
+                    scaleX = pop.value
+                    scaleY = pop.value
+                }
+                .clip(RoundedCornerShape(16.dp))
+                .background(GameColors.Card.copy(alpha = 0.9f))
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.game_combo, shownCombo),
+                    color = GameColors.Star,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 22.sp,
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = stringResource(R.string.game_combo_points, shownPoints),
+                    color = GameColors.TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            LinearProgressIndicator(
+                progress = { timeLeft.value },
+                color = GameColors.Star,
+                trackColor = GameColors.ProgressTrack,
+                strokeCap = StrokeCap.Round,
+                gapSize = 0.dp,
+                drawStopIndicator = {},
+                modifier = Modifier
+                    .width(120.dp)
+                    .height(4.dp),
+            )
+        }
     }
 }
 
@@ -256,6 +415,40 @@ private fun GameActions(state: GameState, onEvent: (GameEvent) -> Unit) {
 }
 
 @Composable
+private fun achievementLines(state: GameState): List<String> =
+    state.achievements.map { stringResource(R.string.result_achievement, stringResource(it.titleRes())) }
+
+/** The lesson's explanation, under the cube. */
+@Composable
+private fun LessonCard(topic: LessonTopic, number: Int, count: Int, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(GameColors.Card.copy(alpha = 0.95f))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.tutorial_lesson, number, count).uppercase(),
+            color = GameColors.ArrowRest,
+            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(stringResource(topic.titleRes()), color = GameColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text(stringResource(topic.bodyRes()), color = GameColors.TextSecondary, fontSize = 14.sp)
+    }
+}
+
+@Composable
+private fun onlineLine(online: OnlineResult): String? = when (online) {
+    OnlineResult.None -> null
+    OnlineResult.Sending -> stringResource(R.string.result_online_sending)
+    OnlineResult.Queued -> stringResource(R.string.result_online_queued)
+    is OnlineResult.Ranked -> stringResource(R.string.result_online_rank, online.rank)
+}
+
+@Composable
 private fun withCount(label: String, count: Int?): String =
     if (count == null) label else stringResource(R.string.game_count, label, count)
 
@@ -282,6 +475,7 @@ private fun ResultCard(
     title: String,
     subtitle: String,
     stars: Int?,
+    detail: String? = null,
     primaryLabel: String,
     onPrimary: () -> Unit,
     secondaryLabel: String,
@@ -299,6 +493,10 @@ private fun ResultCard(
         Text(title, color = GameColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 24.sp)
         Spacer(Modifier.height(4.dp))
         Text(subtitle, color = GameColors.TextSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
+        if (detail != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(detail, color = GameColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        }
         if (stars != null) {
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -337,7 +535,13 @@ private fun GameScreenPreview() {
     val puzzle = PuzzleEngine.start(level, difficulty.lives, difficulty.undos, difficulty.hints)
     Arrow3dTheme {
         GameScreen(
-            state = GameState(difficulty = difficulty, levelNumber = 24, isLoading = false, puzzle = puzzle),
+            state = GameState(
+                mode = PlayMode.Classic(difficulty),
+                levelNumber = 24,
+                gridSize = difficulty.gridSize,
+                isLoading = false,
+                puzzle = puzzle,
+            ),
             camera = rememberCubeCameraState(),
             fx = ArrowFxState(),
             onEvent = {},
@@ -350,7 +554,7 @@ private fun GameScreenPreview() {
 private fun GameScreenLoadingPreview() {
     Arrow3dTheme {
         GameScreen(
-            state = GameState(difficulty = Difficulty.EASY),
+            state = GameState(mode = PlayMode.Classic(Difficulty.EASY)),
             camera = rememberCubeCameraState(),
             fx = ArrowFxState(),
             onEvent = {},

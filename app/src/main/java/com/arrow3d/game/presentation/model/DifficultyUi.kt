@@ -3,6 +3,7 @@ package com.arrow3d.game.presentation.model
 import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.Color
 import com.arrow3d.domain.generator.Difficulty
+import com.arrow3d.domain.modes.PlayMode
 import com.arrow3d.game.R
 import com.arrow3d.game.ui.theme.GameColors
 
@@ -30,4 +31,19 @@ fun Difficulty.accent(): Color = when (this) {
     Difficulty.MEDIUM -> GameColors.Medium
     Difficulty.HARD -> GameColors.Hard
     Difficulty.EXPERT -> GameColors.Expert
+}
+
+@StringRes
+fun PlayMode.nameRes(): Int = when (this) {
+    is PlayMode.Classic -> difficulty.nameRes()
+    PlayMode.Adaptive -> R.string.mode_adaptive
+    PlayMode.Daily -> R.string.mode_daily
+    PlayMode.Tutorial -> R.string.mode_tutorial
+}
+
+fun PlayMode.accent(): Color = when (this) {
+    is PlayMode.Classic -> difficulty.accent()
+    PlayMode.Adaptive -> GameColors.Adaptive
+    PlayMode.Daily -> GameColors.Star
+    PlayMode.Tutorial -> GameColors.ArrowRest
 }

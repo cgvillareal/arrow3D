@@ -24,3 +24,4 @@ rootProject.name = "Arrow3D"
 
 include(":app")
 include(":core:domain")
+include(":core:online")

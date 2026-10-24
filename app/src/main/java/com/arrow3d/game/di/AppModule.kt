@@ -1,11 +1,20 @@
 package com.arrow3d.game.di
 
-import com.arrow3d.domain.generator.Difficulty
+import com.arrow3d.domain.modes.PlayMode
+import com.arrow3d.game.BuildConfig
+import com.arrow3d.game.audio.AndroidMusicPlayer
+import com.arrow3d.game.audio.AndroidSoundPlayer
+import com.arrow3d.game.audio.IMusicPlayer
+import com.arrow3d.game.audio.ISoundPlayer
+import com.arrow3d.game.data.IOnlineRanking
 import com.arrow3d.game.data.IProgressRepository
+import com.arrow3d.game.data.OnlineRankingImpl
 import com.arrow3d.game.data.ProgressRepositoryImpl
 import com.arrow3d.game.haptics.AndroidHaptics
 import com.arrow3d.game.haptics.IHaptics
+import com.arrow3d.game.presentation.achievements.AchievementsViewModel
 import com.arrow3d.game.presentation.game.GameViewModel
+import com.arrow3d.game.presentation.records.RecordsViewModel
 import com.arrow3d.game.presentation.select.ModeSelectViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
@@ -14,7 +23,14 @@ import org.koin.dsl.module
 val appModule = module {
     single<IProgressRepository> { ProgressRepositoryImpl(androidContext()) }
     single<IHaptics> { AndroidHaptics(androidContext()) }
+    single<ISoundPlayer> { AndroidSoundPlayer(androidContext()) }
+    single<IMusicPlayer> { AndroidMusicPlayer() }
+    single<IOnlineRanking> { OnlineRankingImpl(androidContext(), BuildConfig.RANKING_URL) }
 
     viewModel { ModeSelectViewModel(get()) }
-    viewModel { params -> GameViewModel(difficulty = params.get<Difficulty>(), progressRepository = get(), haptics = get()) }
+    viewModel { RecordsViewModel(get(), get()) }
+    viewModel { AchievementsViewModel(get()) }
+    viewModel { params ->
+        GameViewModel(mode = params.get<PlayMode>(0), progressRepository = get(), haptics = get(), sound = get(), online = get())
+    }
 }

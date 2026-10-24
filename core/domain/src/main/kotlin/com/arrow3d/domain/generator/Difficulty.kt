@@ -13,13 +13,17 @@ enum class Difficulty(
     val pathBias: Double,
     /** Chance of placing a traveler arrow when one fits. */
     val travelerChance: Double,
+    /** Chance of placing a bent arrow (it snakes between the others) when one fits. */
+    val bendChance: Double,
+    /** Longest bent arrow; bent arrows can be longer than a face side. */
+    val maxBentLength: Int,
     val lives: Int?,
     val undos: Int?,
     val hints: Int?,
 ) {
-    ZEN(gridSize = 2, maxArrowLength = 2, lengthBias = 0.5, pathBias = 0.0, travelerChance = 0.0, lives = null, undos = null, hints = null),
-    EASY(gridSize = 3, maxArrowLength = 3, lengthBias = 1.0, pathBias = 0.8, travelerChance = 0.0, lives = 5, undos = 5, hints = 3),
-    MEDIUM(gridSize = 4, maxArrowLength = 4, lengthBias = 1.2, pathBias = 1.5, travelerChance = 0.0, lives = 3, undos = 3, hints = 2),
-    HARD(gridSize = 5, maxArrowLength = 5, lengthBias = 1.4, pathBias = 2.2, travelerChance = 0.12, lives = 3, undos = 2, hints = 1),
-    EXPERT(gridSize = 6, maxArrowLength = 6, lengthBias = 1.5, pathBias = 3.0, travelerChance = 0.25, lives = 2, undos = 1, hints = 1),
+    ZEN(gridSize = 2, maxArrowLength = 2, lengthBias = 0.5, pathBias = 0.0, travelerChance = 0.0, bendChance = 0.0, maxBentLength = 2, lives = null, undos = null, hints = null),
+    EASY(gridSize = 3, maxArrowLength = 3, lengthBias = 1.0, pathBias = 0.8, travelerChance = 0.0, bendChance = 0.25, maxBentLength = 4, lives = 5, undos = 5, hints = 3),
+    MEDIUM(gridSize = 4, maxArrowLength = 4, lengthBias = 1.2, pathBias = 1.5, travelerChance = 0.0, bendChance = 0.45, maxBentLength = 6, lives = 3, undos = 3, hints = 2),
+    HARD(gridSize = 5, maxArrowLength = 5, lengthBias = 1.4, pathBias = 2.2, travelerChance = 0.12, bendChance = 0.7, maxBentLength = 8, lives = 3, undos = 2, hints = 1),
+    EXPERT(gridSize = 6, maxArrowLength = 6, lengthBias = 1.5, pathBias = 3.0, travelerChance = 0.25, bendChance = 0.85, maxBentLength = 10, lives = 2, undos = 1, hints = 1),
 }

@@ -12,6 +12,9 @@ sealed interface HapticEvent {
     data object Blocked : HapticEvent
     data object TravelerFold : HapticEvent
     data class Chain(val count: Int) : HapticEvent
+
+    /** Another release inside the combo window; stronger as the combo grows. */
+    data class Combo(val count: Int) : HapticEvent
     data object LevelComplete : HapticEvent
     data object OutOfLives : HapticEvent
 }
@@ -49,6 +52,12 @@ class AndroidHaptics(context: Context) : IHaptics {
                 }
                 composition.compose()
             }
+            is HapticEvent.Combo -> {
+                if (!v.areAllPrimitivesSupported(VibrationEffect.Composition.PRIMITIVE_CLICK)) return null
+                VibrationEffect.startComposition()
+                    .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, comboStrength(event.count))
+                    .compose()
+            }
             HapticEvent.LevelComplete -> {
                 if (!v.areAllPrimitivesSupported(
                         VibrationEffect.Composition.PRIMITIVE_SLOW_RISE,
@@ -66,6 +75,8 @@ class AndroidHaptics(context: Context) : IHaptics {
         }
     }
 
+    private fun comboStrength(count: Int): Float = (0.35f + 0.1f * (count - 2)).coerceIn(0.35f, 1f)
+
     private fun waveform(event: HapticEvent, amplitude: Boolean): VibrationEffect {
         fun amp(value: Int) = if (amplitude) value else VibrationEffect.DEFAULT_AMPLITUDE
         return when (event) {
@@ -74,6 +85,7 @@ class AndroidHaptics(context: Context) : IHaptics {
             HapticEvent.Blocked ->
                 VibrationEffect.createWaveform(longArrayOf(0, 14, 40, 14), intArrayOf(0, amp(255), 0, amp(255)), -1)
             HapticEvent.TravelerFold -> VibrationEffect.createOneShot(10, amp(90))
+            is HapticEvent.Combo -> VibrationEffect.createOneShot(16, amp((255 * comboStrength(event.count)).toInt()))
             is HapticEvent.Chain ->
                 VibrationEffect.createWaveform(longArrayOf(0, 15, 30, 15, 30, 15), intArrayOf(0, amp(80), 0, amp(150), 0, amp(220)), -1)
             HapticEvent.LevelComplete ->

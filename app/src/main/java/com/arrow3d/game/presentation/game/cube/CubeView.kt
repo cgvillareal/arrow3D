@@ -27,6 +27,7 @@ import com.arrow3d.game.render.ArrowHit
 import com.arrow3d.game.render.CubeProjector
 import com.arrow3d.game.render.HitTest
 import com.arrow3d.game.render.Point2
+import com.arrow3d.game.ui.theme.ArrowPalette
 import kotlinx.coroutines.isActive
 
 /**
@@ -47,6 +48,7 @@ fun CubeView(
     enabled: Boolean,
     onArrowTap: (ArrowHit) -> Unit,
     modifier: Modifier = Modifier,
+    palette: ArrowPalette = ArrowPalette.Standard,
 ) {
     val renderer = remember { CubeRenderer() }
     var pressedArrowId by remember { mutableStateOf<Int?>(null) }
@@ -168,6 +170,7 @@ fun CubeView(
                 now = fx.frameMillis.longValue,
                 hintArrowId = hintArrowId,
                 pressedArrowId = pressedArrowId,
+                palette = palette,
             )
         }
     }

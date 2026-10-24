@@ -1,5 +1,6 @@
 package com.arrow3d.domain
 
+import com.arrow3d.domain.engine.ComboRules
 import com.arrow3d.domain.engine.PuzzleEngine
 import com.arrow3d.domain.engine.PuzzleStatus
 import com.arrow3d.domain.engine.TapOutcome
@@ -93,5 +94,50 @@ class PuzzleEngineTest {
         assertEquals(0, hint)
         assertEquals(0, state.hintsLeft)
         assertNull(PuzzleEngine.hint(state).second)
+    }
+
+    @Test
+    fun `quick releases build a combo that multiplies points`() {
+        var state = start()
+        val first = PuzzleEngine.tap(state, 0, nowMillis = 1_000).also { state = it.state }.outcome as TapOutcome.Released
+        val second = PuzzleEngine.tap(state, 1, nowMillis = 2_000).also { state = it.state }.outcome as TapOutcome.Released
+        val third = PuzzleEngine.tap(state, 2, nowMillis = 3_000).also { state = it.state }.outcome as TapOutcome.Released
+        assertEquals(listOf(1, 2, 3), listOf(first.combo, second.combo, third.combo))
+        val base = ComboRules.basePoints(level.arrow(0))
+        assertEquals(listOf(base, base * 2, base * 3), listOf(first.points, second.points, third.points))
+        assertEquals(base * 6, state.score)
+        assertEquals(3, state.bestCombo)
+    }
+
+    @Test
+    fun `a slow release starts a new combo`() {
+        var state = PuzzleEngine.tap(start(), 0, nowMillis = 1_000).state
+        state = PuzzleEngine.tap(state, 1, nowMillis = 1_000 + ComboRules.WINDOW_MS + 1).state
+        assertEquals(1, state.combo)
+        assertEquals(1, state.bestCombo)
+    }
+
+    @Test
+    fun `a blocked tap breaks the combo, an ambiguous one does not`() {
+        val state = PuzzleEngine.tap(start(), 0, nowMillis = 1_000).state
+        val ambiguous = PuzzleEngine.tap(state, 2, ambiguous = true, nowMillis = 1_100)
+        assertEquals(1, ambiguous.state.combo)
+        assertEquals(0, (ambiguous.outcome as TapOutcome.Blocked).comboLost)
+
+        val blocked = PuzzleEngine.tap(state, 2, nowMillis = 1_200)
+        assertEquals(1, (blocked.outcome as TapOutcome.Blocked).comboLost)
+        assertEquals(0, blocked.state.combo)
+        val next = PuzzleEngine.tap(blocked.state, 1, nowMillis = 1_300).outcome as TapOutcome.Released
+        assertEquals(1, next.combo)
+    }
+
+    @Test
+    fun `undo takes back the points and ends the combo`() {
+        var state = PuzzleEngine.tap(start(), 0, nowMillis = 1_000).state
+        state = PuzzleEngine.tap(state, 1, nowMillis = 1_500).state
+        val before = state.score
+        val (undone, _) = PuzzleEngine.undo(state)
+        assertEquals(before - ComboRules.basePoints(level.arrow(1)) * 2, undone.score)
+        assertEquals(0, undone.combo)
     }
 }

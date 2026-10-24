@@ -13,13 +13,43 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "1.0.0"
     }
 
+    // Release signing comes from Gradle properties or environment variables, never from the repo:
+    // arrow3d.keystore / ARROW3D_KEYSTORE (path), arrow3d.storePassword / ARROW3D_STORE_PASSWORD,
+    // arrow3d.keyAlias / ARROW3D_KEY_ALIAS, arrow3d.keyPassword / ARROW3D_KEY_PASSWORD.
+    // Without them the release build is unsigned (fine for CI checks, not for the store).
+    fun secret(property: String, env: String): String? = providers.gradleProperty(property).orNull ?: System.getenv(env)
+    val keystorePath = secret("arrow3d.keystore", "ARROW3D_KEYSTORE")
+    signingConfigs {
+        if (keystorePath != null) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = secret("arrow3d.storePassword", "ARROW3D_STORE_PASSWORD")
+                keyAlias = secret("arrow3d.keyAlias", "ARROW3D_KEY_ALIAS")
+                keyPassword = secret("arrow3d.keyPassword", "ARROW3D_KEY_PASSWORD")
+            }
+        }
+    }
+
+    // Online ranking server. Set it with -Parrow3d.rankingUrl=https://... or in gradle.properties.
+    // Debug builds default to the emulator's view of a server on the host (http://10.0.2.2:8080);
+    // release builds have the ranking turned off until a URL is given.
+    val rankingUrl = providers.gradleProperty("arrow3d.rankingUrl")
+
     buildTypes {
+        debug {
+            buildConfigField("String", "RANKING_URL", "\"${rankingUrl.getOrElse("http://10.0.2.2:8080")}\"")
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (keystorePath != null) signingConfig = signingConfigs.getByName("release")
+            buildConfigField("String", "RANKING_URL", "\"${rankingUrl.getOrElse("")}\"")
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
         }
     }
     compileOptions {
@@ -31,6 +61,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -39,6 +70,7 @@ android {
 
 dependencies {
     implementation(project(":core:domain"))
+    implementation(project(":core:online"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

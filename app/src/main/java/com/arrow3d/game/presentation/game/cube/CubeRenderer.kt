@@ -14,8 +14,10 @@ import com.arrow3d.game.render.CubeProjector
 import com.arrow3d.game.render.Point2
 import com.arrow3d.game.render.ScreenPolygon
 import com.arrow3d.game.render.Vec3f
+import com.arrow3d.game.ui.theme.ArrowPalette
 import com.arrow3d.game.ui.theme.GameColors
 import kotlin.math.PI
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /** Draws faces, grid and arrows, applying the running animations. */
@@ -31,6 +33,7 @@ class CubeRenderer {
         now: Long,
         hintArrowId: Int?,
         pressedArrowId: Int?,
+        palette: ArrowPalette,
     ) {
         drawFaces(level, projector)
 
@@ -38,7 +41,7 @@ class CubeRenderer {
         // Arrows at rest first, then animated ones on top.
         val resting = remaining.filter { it !in fx.exiting }
         for (id in resting) {
-            drawArrow(level, id, projector, fx, now, hintArrowId, pressedArrowId, halos)
+            drawArrow(level, id, projector, fx, now, hintArrowId, pressedArrowId, palette, halos)
         }
         val finished = ArrayList<Int>()
         for ((id, exit) in fx.exiting) {
@@ -49,7 +52,7 @@ class CubeRenderer {
             }
             val route = level.routeOf(id)
             val offset = easeIn(t) * ArrowGeometry.exitTravel(route)
-            val color = lerp(GameColors.ArrowExitStart, GameColors.ArrowExitEnd, t)
+            val color = lerp(palette.exitStart, palette.exitEnd, t)
             val alpha = 1f - smoothStep(0.6f, 1f, t)
             val shape = ArrowGeometry.shape(route, offset, projector)
             shape.polygons.forEach { fillPolygon(it, color.copy(alpha = alpha)) }
@@ -59,7 +62,7 @@ class CubeRenderer {
         halos.forEach { (center, progress) ->
             val radius = projector.cellPixels * (0.35f + 0.55f * progress)
             drawCircle(
-                color = GameColors.ArrowBlocked.copy(alpha = 1f - progress),
+                color = palette.blocked.copy(alpha = 1f - progress),
                 radius = radius,
                 center = Offset(center.x, center.y),
                 style = Stroke(width = projector.cellPixels * 0.08f),
@@ -99,11 +102,12 @@ class CubeRenderer {
         now: Long,
         hintArrowId: Int?,
         pressedArrowId: Int?,
+        palette: ArrowPalette,
         halos: MutableList<Pair<Point2, Float>>,
     ) {
         val arrow = level.arrow(id)
         val route = level.routeOf(id)
-        var color = if (arrow.kind == ArrowKind.TRAVELER) GameColors.ArrowTraveler else GameColors.ArrowRest
+        var color = if (arrow.kind == ArrowKind.TRAVELER) palette.traveler else palette.rest
         var offset = 0f
         var alpha = 1f
         var widthScale = 1f
@@ -116,7 +120,7 @@ class CubeRenderer {
                 val t = (elapsed.toFloat() / ArrowFxState.BLOCK_MS).coerceIn(0f, 1f)
                 offset = block.bump * sin(PI.toFloat() * t)
                 val fade = smoothStep(0.7f, 1f, elapsed.toFloat() / ArrowFxState.BLOCK_COLOR_MS)
-                color = lerp(GameColors.ArrowBlocked, color, fade)
+                color = lerp(palette.blocked, color, fade)
                 if (elapsed < ArrowFxState.HALO_MS) {
                     level.routeOf(block.blockerId).let { r ->
                         ArrowGeometry.shape(r, 0f, projector).tip?.let { tip ->
@@ -149,6 +153,23 @@ class CubeRenderer {
 
         val shape = ArrowGeometry.shape(route, offset, projector, widthScale)
         shape.polygons.forEach { fillPolygon(it, color.copy(alpha = alpha)) }
+        if (palette.markTravelers && arrow.kind == ArrowKind.TRAVELER) drawMarkers(shape.spine, projector, alpha)
+    }
+
+    /** Dots along the body, about one per cell, so a traveler is told apart by shape too. */
+    private fun DrawScope.drawMarkers(spine: List<Point2>, projector: CubeProjector, alpha: Float) {
+        val cell = projector.cellPixels
+        spine.chunked(2).filter { it.size == 2 }.forEach { (a, b) ->
+            val count = (a.distanceTo(b) / cell).roundToInt().coerceAtLeast(1)
+            for (i in 0 until count) {
+                val f = (i + 0.5f) / count
+                drawCircle(
+                    color = GameColors.Background.copy(alpha = 0.85f * alpha),
+                    radius = cell * 0.09f,
+                    center = Offset(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f),
+                )
+            }
+        }
     }
 
     private fun DrawScope.fillPolygon(polygon: ScreenPolygon, color: Color) {

@@ -12,6 +12,7 @@ import com.arrow3d.domain.surface.FaceId
 import com.arrow3d.domain.surface.Vec3i
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -84,6 +85,38 @@ class SurfaceTest {
         assertEquals(1 + 3, path.size)
         assertEquals(FaceId.TOP, path.first().face)
         assertTrue(path.drop(1).all { it.face == FaceId.RIGHT })
+    }
+
+    @Test
+    fun `bent arrows must touch, not cross themselves and point along the last step`() {
+        val ok = Arrow.fromPath(0, FaceId.TOP, listOf(Cell(0, 0), Cell(1, 0), Cell(1, 1), Cell(2, 1)))
+        assertEquals(Dir2D.U_PLUS, ok.dir)
+        assertEquals(Dir2D.U_PLUS, ok.tailDir)
+        assertEquals(2, ok.bends)
+        assertThrows(IllegalArgumentException::class.java) {
+            Arrow(1, FaceId.TOP, listOf(Cell(0, 0), Cell(2, 0)), Dir2D.U_PLUS) // gap
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            Arrow(1, FaceId.TOP, listOf(Cell(0, 0), Cell(1, 0), Cell(1, 1)), Dir2D.U_PLUS) // head points sideways
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            Arrow.fromPath(1, FaceId.TOP, listOf(Cell(0, 0), Cell(1, 0), Cell(1, 1), Cell(0, 1), Cell(0, 0)))
+        }
+    }
+
+    @Test
+    fun `bent route turns at cell centres and keeps the body length`() {
+        // tail (0,0) -> (1,0) -> (1,1) -> head (1,2) going V_PLUS, then out through the far edge.
+        val arrow = Arrow.fromPath(0, FaceId.TOP, listOf(Cell(0, 0), Cell(1, 0), Cell(1, 1), Cell(1, 2)))
+        val route = surface.route(arrow)
+        // back of tail, the turn, the edge, off the surface
+        assertEquals(4, route.points.size)
+        assertEquals(surface.center(CellRef(FaceId.TOP, Cell(1, 0))), route.points[1])
+        assertEquals(route.points.size - 1, route.segmentNormals.size)
+        assertEquals(8, route.bodyLength)
+        // 2 * 4 - 1 along the body, + 1 to the edge
+        assertEquals(8, route.surfaceLength)
+        assertTrue(surface.exitPath(arrow).isEmpty())
     }
 
     @Test

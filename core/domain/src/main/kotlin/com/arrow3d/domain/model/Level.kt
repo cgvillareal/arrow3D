@@ -27,7 +27,11 @@ class Level(
         }
     }
 
-    private val paths: Map<Int, List<CellRef>> = arrows.associate { it.id to surface.exitPath(it) }
+    private val paths: Map<Int, List<CellRef>> = arrows.associate { a ->
+        val path = surface.exitPath(a)
+        require(path.none { it in a.refs }) { "Arrow ${a.id} points into its own body" }
+        a.id to path
+    }
     private val routes: Map<Int, Route> = arrows.associate { it.id to surface.route(it) }
 
     val ids: Set<Int> get() = byId.keys

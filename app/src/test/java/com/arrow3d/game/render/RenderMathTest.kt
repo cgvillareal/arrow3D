@@ -46,6 +46,18 @@ class RenderMathTest {
     }
 
     @Test
+    fun `bent arrow draws one quad per straight run, a corner per turn and the head`() {
+        // L on the top face: (0,0) -> (1,0) -> (1,1) -> (1,2), head pointing V_PLUS
+        val arrow = Arrow.fromPath(0, FaceId.TOP, listOf(Cell(0, 0), Cell(1, 0), Cell(1, 1), Cell(1, 2)))
+        val shape = ArrowGeometry.shape(surface.route(arrow), 0f, projector)
+        assertEquals(4, shape.polygons.size)
+        assertNotNull(shape.tip)
+        // touching the corner cell hits it
+        val corner = projector.projectSurface(surface.center(CellRef(FaceId.TOP, Cell(1, 0))))
+        assertEquals(0, HitTest.find(Level(surface, listOf(arrow)), setOf(0), projector, corner)?.arrowId)
+    }
+
+    @Test
     fun `arrow on a hidden face draws nothing`() {
         val arrow = Arrow.fromTail(0, FaceId.BOTTOM, Cell(0, 1), Dir2D.U_PLUS, 2)
         val shape = ArrowGeometry.shape(surface.route(arrow), 0f, projector)

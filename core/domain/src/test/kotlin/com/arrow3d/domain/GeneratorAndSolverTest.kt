@@ -27,7 +27,10 @@ class GeneratorAndSolverTest {
                 val lvl = generated.level
                 assertTrue("$difficulty #$level must cover the surface", lvl.coversWholeSurface)
                 assertTrue("$difficulty #$level must be solvable", Solver.isSolvable(lvl))
-                assertTrue(lvl.arrows.all { it.length <= difficulty.maxArrowLength })
+                assertTrue(lvl.arrows.filter { !it.isBent }.all { it.length <= difficulty.maxArrowLength })
+                assertTrue(lvl.arrows.all { it.length <= difficulty.maxBentLength })
+                // a bent body never lies on its own way out
+                assertTrue(lvl.arrows.all { a -> lvl.pathOf(a.id).none { it in a.refs } })
             }
         }
     }
@@ -47,6 +50,34 @@ class GeneratorAndSolverTest {
         assertTrue(levels.any { g -> g.level.arrows.any { it.length >= 3 } })
         assertTrue(levels.any { g -> g.level.arrows.any { it.kind == ArrowKind.TRAVELER } })
         assertTrue(levels.none { it.usedFallback })
+    }
+
+    @Test
+    fun `long arrows bend between the others from medium up`() {
+        listOf(Difficulty.MEDIUM, Difficulty.HARD, Difficulty.EXPERT).forEach { d ->
+            val generator = LevelGenerator(GeneratorConfig.from(d))
+            val arrows = (1..10).flatMap { generator.generate(LevelGenerator.seedFor(d, it)).level.arrows }
+            assertTrue("$d should have bent arrows", arrows.any { it.isBent })
+            assertTrue("$d should have bent arrows longer than a face side", arrows.any { it.isBent && it.length > d.gridSize })
+        }
+        val zen = LevelGenerator(GeneratorConfig.from(Difficulty.ZEN))
+        assertTrue((1..10).all { zen.generate(LevelGenerator.seedFor(Difficulty.ZEN, it)).level.arrows.none { a -> a.isBent } })
+    }
+
+    @Test
+    fun `only the cells in front of a bent head can block it`() {
+        // An L on the top face: tail (0,1) -> (1,1) -> head (1,0) pointing V_MINUS, out through (1,0)'s edge.
+        // Arrow 1 sits right beside the body at (2,1), in the way of a straight move but not of the head.
+        val surface = CubeSurface(3)
+        val bent = Arrow.fromPath(0, FaceId.TOP, listOf(Cell(0, 1), Cell(1, 1), Cell(1, 0)))
+        val beside = Arrow.fromTail(1, FaceId.TOP, Cell(2, 1), Dir2D.V_PLUS, 1)
+        val level = Level(surface, listOf(bent, beside))
+        assertEquals(1, bent.bends)
+        assertTrue(level.isFree(0, level.ids))
+
+        // A piece right in front of the head does block it.
+        val ahead = Level(surface, listOf(Arrow.fromPath(0, FaceId.TOP, listOf(Cell(0, 2), Cell(1, 2), Cell(1, 1))), Arrow.fromTail(1, FaceId.TOP, Cell(1, 0), Dir2D.U_PLUS, 1)))
+        assertEquals(1, ahead.blockerOf(0, ahead.ids))
     }
 
     @Test
